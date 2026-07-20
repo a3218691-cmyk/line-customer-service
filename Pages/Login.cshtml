@@ -1,0 +1,28 @@
+@page
+@model LineBotLogger.Pages.LoginModel
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>登入</title>
+    <style>
+        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 24px; color: #222; }
+        h1 { font-size: 20px; }
+        form { display: flex; gap: 6px; }
+        input { padding: 6px; font: inherit; }
+        .error { border: 1px solid #c00; background: #fee; color: #900; padding: 8px; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <h1>登入</h1>
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <p class="error">@Model.ErrorMessage</p>
+    }
+    <form method="post">
+        <input type="password" name="password" required autofocus placeholder="密碼" />
+        <button type="submit">登入</button>
+    </form>
+</body>
+</html>

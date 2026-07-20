@@ -1,0 +1,60 @@
+@page
+@model LineBotLogger.Pages.InboxModel
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>待回清單</title>
+    <style>
+        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 24px; color: #222; }
+        h1 { font-size: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; }
+        td.meta { white-space: nowrap; color: #555; font-size: 13px; }
+        .error { border: 1px solid #c00; background: #fee; color: #900; padding: 8px; margin-bottom: 12px; }
+        .reply { display: flex; gap: 6px; align-items: flex-start; }
+        .reply textarea { flex: 1; padding: 4px; font: inherit; min-width: 200px; height: 60px; }
+        .logout { float: right; }
+    </style>
+</head>
+<body>
+    <form method="post" asp-page="/Logout" class="logout"><button type="submit">登出</button></form>
+    <h1>待回清單（@Model.Items.Count）</h1>
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <p class="error">@Model.ErrorMessage</p>
+    }
+    @if (Model.Items.Count == 0)
+    {
+        <p>目前沒有待回訊息</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr><th>訊息內容</th><th>收到時間</th><th>對話 ID</th><th>回覆</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td>@item.MessageText</td>
+                        <td class="meta">@LineBotLogger.Pages.InboxModel.ToTaipei(item.LineTimestamp)</td>
+                        <td class="meta">@LineBotLogger.Pages.InboxModel.ShortId(item.ConversationId)</td>
+                        <td>
+                            <form method="post" class="reply">
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <textarea name="replyText" required placeholder="輸入回覆內容">@(Model.DraftForId == item.Id.ToString() ? Model.DraftText : null)</textarea>
+                                <button type="submit">送出</button>
+                                <button type="submit" asp-page-handler="Draft" formnovalidate>AI 起草</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</body>
+</html>
