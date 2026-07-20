@@ -53,6 +53,7 @@
         <a class="active" asp-page="/Inbox">待審核</a>
         <a asp-page="/Blacklist">黑名單</a>
         <div class="right">
+            <a asp-page="/Index">← 工作台</a>
             <span>@User.Identity?.Name</span>
             <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
         </div>
