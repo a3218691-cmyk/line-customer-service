@@ -6,15 +6,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>工作台</title>
+    <link rel="stylesheet" href="/site.css" />
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 0; background: #111; color: #222; }
-        .top { display: flex; align-items: center; height: 52px; padding: 0 20px; }
-        .top .brand { color: #c8f042; font-weight: 700; font-size: 16px; }
-        .top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: #999; }
-        .top .right form { margin: 0; }
-        .top .right button { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
-        .wrap { max-width: 900px; margin: 0 auto; padding: 32px 16px 48px; }
+        .wrap { padding-top: 32px; }
         .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
         .tile { display: block; background: #fff; border-radius: 10px; padding: 24px; text-decoration: none; color: #222; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
         .tile .name { font-weight: 700; font-size: 18px; }
@@ -23,7 +17,7 @@
     </style>
 </head>
 <body>
-    <div class="top">
+    <div class="nav">
         <span class="brand">工作台</span>
         <div class="right">
             <span>@User.Identity?.Name</span>
