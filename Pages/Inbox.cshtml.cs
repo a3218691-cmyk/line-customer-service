@@ -62,7 +62,7 @@ public class InboxModel : PageModel
 
         // 有待回訊息的對話,依該對話最新待回時間由新到舊
         var heads = (await conn.QueryAsync<ConversationHead>("""
-            SELECT ConversationId, COUNT(*) AS NewCount, MAX(LineTimestamp) AS LastTs
+            SELECT ConversationId, COUNT(*)::int AS NewCount, MAX(LineTimestamp) AS LastTs
             FROM Messages
             WHERE SourceType = 'user' AND Status = 'new'
             GROUP BY ConversationId
@@ -126,8 +126,8 @@ public class InboxModel : PageModel
         try
         {
             var known = await conn.QueryAsync<LineUserRow>(
-                "SELECT ConversationId, DisplayName FROM LineUsers WHERE ConversationId IN @Cids",
-                new { Cids = conversationIds });
+                "SELECT ConversationId, DisplayName FROM LineUsers WHERE ConversationId = ANY(@Cids)",
+                new { Cids = conversationIds.ToArray() });
             foreach (var row in known)
                 names[row.ConversationId] = row.DisplayName;
 
