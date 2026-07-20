@@ -19,6 +19,7 @@
         .tile { display: block; background: #fff; border-radius: 10px; padding: 24px; text-decoration: none; color: #222; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
         .tile .name { font-weight: 700; font-size: 18px; }
         .tile .desc { margin-top: 6px; font-size: 13px; color: #888; }
+        .tile .badge { display: inline-block; margin-top: 12px; background: #c8f042; color: #222; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -35,6 +36,10 @@
             <a class="tile" asp-page="/Inbox">
                 <div class="name">LINE 客服</div>
                 <div class="desc">待審核訊息與回覆</div>
+                @if (Model.PendingConversations > 0)
+                {
+                    <div class="badge">@Model.PendingConversations 位待回</div>
+                }
             </a>
         </div>
     </div>
