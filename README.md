@@ -74,9 +74,19 @@ Server 內建 background service,每 5 分鐘檢查一次:台灣時間過了 `Re
 
 ## 登入保護
 
-`/inbox` 需登入(Cookie 驗證 + 單一密碼,密碼讀 `Auth:Password`)。未登入會導向 `/login`;登出走 `/logout`。
+`/inbox` 與 `/blacklist` 需登入(Cookie 驗證 + 單一密碼,密碼讀 `Auth:Password`)。未登入會導向 `/login`;登出走 `/logout`。
 `Auth:Password` 為空時**啟動即失敗**,不會靜默開放。
 `/health` 與 `/webhook` 維持公開(webhook 自身有 HMAC 驗簽)。
+
+## 黑名單
+
+`/inbox` 每張卡片有「加入黑名單」:寫入 `Blacklist` 並把該對話的待回訊息標成 `skipped`(卡片消失)。
+之後 webhook 收到該對話的事件會**直接跳過、不寫 DB**(只留一行 log),request 仍回 200 給 LINE。
+
+誤封到 `/blacklist` 按「解除」即可,解除後的新訊息會照常進待回清單。
+
+相關建表 SQL:`sql/004_create_line_users.sql`(客人顯示名稱快取)、`sql/005_create_blacklist.sql`。
+兩張表同步內嵌在 `Program.cs` 的 `SchemaSql`,啟動時自動建立。
 
 ## 部署到 Render(Docker)
 

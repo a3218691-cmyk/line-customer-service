@@ -1,0 +1,65 @@
+@page
+@using LineBotLogger.Pages
+@model LineBotLogger.Pages.BlacklistModel
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>黑名單</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 0; background: #f5f5f5; color: #222; }
+        .nav { display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 20px; background: #111; }
+        .nav .brand { color: #c8f042; font-weight: 700; font-size: 16px; }
+        .nav a { color: #ccc; text-decoration: none; font-size: 14px; padding: 6px 14px; border-radius: 16px; }
+        .nav a.active { background: #c8f042; color: #111; font-weight: 600; }
+        .nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: #999; }
+        .nav .right form { margin: 0; }
+        .nav .right button { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+        .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+        .card { background: #fff; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); display: flex; align-items: center; gap: 12px; }
+        .card .name { font-weight: 600; }
+        .card .meta { font-size: 12px; color: #888; }
+        .card form { margin: 0 0 0 auto; }
+        .card button { border: none; border-radius: 6px; padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer; background: #e5e5e5; color: #444; }
+        .empty { text-align: center; color: #999; padding: 60px 0; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <span class="brand">LINE 客服</span>
+        <a asp-page="/Inbox">待審核</a>
+        <a class="active" asp-page="/Blacklist">黑名單</a>
+        <div class="right">
+            <span>@User.Identity?.Name</span>
+            <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
+        </div>
+    </div>
+
+    <div class="wrap">
+        @if (Model.Items.Count == 0)
+        {
+            <p class="empty">黑名單是空的</p>
+        }
+        else
+        {
+            @foreach (var item in Model.Items)
+            {
+                <div class="card">
+                    <span class="name">
+                        @(string.IsNullOrWhiteSpace(item.DisplayName)
+                            ? InboxModel.ShortId(item.ConversationId)
+                            : item.DisplayName)
+                    </span>
+                    <span class="meta">封鎖於 @InboxModel.ToTaipei(item.CreatedAt)</span>
+                    <form method="post" asp-page-handler="Remove">
+                        <input type="hidden" name="conversationId" value="@item.ConversationId" />
+                        <button type="submit">解除</button>
+                    </form>
+                </div>
+            }
+        }
+    </div>
+</body>
+</html>

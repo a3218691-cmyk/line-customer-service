@@ -7,8 +7,12 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHostedService<DailyReportService>();
-// /Inbox 需登入;webhook / health 是 Minimal API,不受影響
-builder.Services.AddRazorPages(o => o.Conventions.AuthorizePage("/Inbox"));
+// /Inbox、/Blacklist 需登入;webhook / health 是 Minimal API,不受影響
+builder.Services.AddRazorPages(o =>
+{
+    o.Conventions.AuthorizePage("/Inbox");
+    o.Conventions.AuthorizePage("/Blacklist");
+});
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(o =>
     {
@@ -130,9 +134,20 @@ app.MapPost("/webhook", async (HttpRequest request) =>
                         messageText = msg.GetProperty("text").GetString();
                 }
 
+                var conversationId = source.GetProperty(conversationIdProp).GetString()!;
+
+                // 黑名單的對話直接不寫 DB
+                if (await conn.ExecuteScalarAsync<bool>(
+                        "SELECT EXISTS (SELECT 1 FROM Blacklist WHERE ConversationId = @Cid)",
+                        new { Cid = conversationId }))
+                {
+                    app.Logger.LogInformation("Blacklisted conversation, event not saved");
+                    continue;
+                }
+
                 await conn.ExecuteAsync(InsertSql, new
                 {
-                    ConversationId = source.GetProperty(conversationIdProp).GetString()!,
+                    ConversationId = conversationId,
                     SourceType = sourceType,
                     LineUserId = source.TryGetProperty("userId", out var uid) ? uid.GetString() : null,
                     MessageType = messageType,
@@ -157,7 +172,7 @@ app.MapPost("/webhook", async (HttpRequest request) =>
     return Results.Ok();
 });
 
-// 啟動時建表。內容與 sql/001, sql/002, sql/003 同步(內嵌避免容器漏複製檔案)
+// 啟動時建表。內容與 sql/001 ~ sql/005 同步(內嵌避免容器漏複製檔案)
 // 失敗直接讓程式起不來,不要連不上 DB 還假裝正常
 const string SchemaSql = """
     CREATE TABLE IF NOT EXISTS Messages (
@@ -187,6 +202,18 @@ const string SchemaSql = """
         MessageId BIGINT      NOT NULL,
         FinalText TEXT        NOT NULL,
         SentAt    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS LineUsers (
+        ConversationId TEXT PRIMARY KEY,
+        DisplayName    TEXT        NOT NULL,
+        CreatedAt      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS Blacklist (
+        ConversationId TEXT PRIMARY KEY,
+        DisplayName    TEXT        NULL,
+        CreatedAt      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     """;
 

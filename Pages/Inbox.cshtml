@@ -1,60 +1,142 @@
 @page
+@using LineBotLogger.Pages
 @model LineBotLogger.Pages.InboxModel
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>待回清單</title>
+    <title>待審核</title>
     <style>
-        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 24px; color: #222; }
-        h1 { font-size: 20px; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; vertical-align: top; }
-        th { background: #f2f2f2; }
-        td.meta { white-space: nowrap; color: #555; font-size: 13px; }
-        .error { border: 1px solid #c00; background: #fee; color: #900; padding: 8px; margin-bottom: 12px; }
-        .reply { display: flex; gap: 6px; align-items: flex-start; }
-        .reply textarea { flex: 1; padding: 4px; font: inherit; min-width: 200px; height: 60px; }
-        .logout { float: right; }
+        * { box-sizing: border-box; }
+        body { font-family: system-ui, "Microsoft JhengHei", sans-serif; margin: 0; background: #f5f5f5; color: #222; }
+        .nav { display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 20px; background: #111; }
+        .nav .brand { color: #c8f042; font-weight: 700; font-size: 16px; }
+        .nav a { color: #ccc; text-decoration: none; font-size: 14px; padding: 6px 14px; border-radius: 16px; }
+        .nav a.active { background: #c8f042; color: #111; font-weight: 600; }
+        .nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: #999; }
+        .nav .right form { margin: 0; }
+        .nav .right button { background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+        .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+        .error { border: 1px solid #c00; background: #fee; color: #900; padding: 8px; margin-bottom: 16px; border-radius: 6px; }
+        .card { background: #fff; border-radius: 10px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        .card-head { display: flex; align-items: center; gap: 8px; }
+        .tag-line { background: #06c755; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+        .cust { font-weight: 600; }
+        .count { margin-left: auto; font-size: 12px; color: #888; }
+        .sub { font-size: 12px; color: #888; margin: 12px 0 8px; }
+        .thread { background: #f7f7f7; border-radius: 8px; padding: 12px; max-height: 400px; overflow-y: auto; }
+        .row { display: flex; flex-direction: column; margin-bottom: 10px; }
+        .row.them { align-items: flex-start; }
+        .row.me { align-items: flex-end; }
+        .bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .them .bubble { background: #e8e8e8; }
+        .me .bubble { background: #c8f042; }
+        .row.fresh .bubble { background: #fffbe0; border: 1px solid #f0d442; }
+        .time { font-size: 11px; color: #999; margin-top: 3px; }
+        .time .flag { color: #b58a00; }
+        .skipped { text-align: center; color: #aaa; font-size: 12px; margin: 8px 0; }
+        .divider { display: flex; align-items: center; gap: 8px; color: #b58a00; font-size: 12px; margin: 14px 0; }
+        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #ddd; }
+        textarea { width: 100%; margin-top: 14px; padding: 10px; font: inherit; font-size: 14px; height: 80px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .actions button { border: none; border-radius: 6px; padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer; }
+        .b-green { background: #c8f042; color: #111; font-weight: 600; }
+        .b-gray { background: #e5e5e5; color: #444; }
+        .b-red { background: #e04b4b; color: #fff; }
+        .empty { text-align: center; color: #999; padding: 60px 0; }
     </style>
 </head>
 <body>
-    <form method="post" asp-page="/Logout" class="logout"><button type="submit">登出</button></form>
-    <h1>待回清單（@Model.Items.Count）</h1>
-    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <p class="error">@Model.ErrorMessage</p>
-    }
-    @if (Model.Items.Count == 0)
-    {
-        <p>目前沒有待回訊息</p>
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr><th>訊息內容</th><th>收到時間</th><th>對話 ID</th><th>回覆</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model.Items)
-                {
-                    <tr>
-                        <td>@item.MessageText</td>
-                        <td class="meta">@LineBotLogger.Pages.InboxModel.ToTaipei(item.LineTimestamp)</td>
-                        <td class="meta">@LineBotLogger.Pages.InboxModel.ShortId(item.ConversationId)</td>
-                        <td>
-                            <form method="post" class="reply">
-                                <input type="hidden" name="id" value="@item.Id" />
-                                <textarea name="replyText" required placeholder="輸入回覆內容">@(Model.DraftForId == item.Id.ToString() ? Model.DraftText : null)</textarea>
-                                <button type="submit">送出</button>
-                                <button type="submit" asp-page-handler="Draft" formnovalidate>AI 起草</button>
-                            </form>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    }
+    <div class="nav">
+        <span class="brand">LINE 客服</span>
+        <a class="active" asp-page="/Inbox">待審核</a>
+        <a asp-page="/Blacklist">黑名單</a>
+        <div class="right">
+            <span>@User.Identity?.Name</span>
+            <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
+        </div>
+    </div>
+
+    <div class="wrap">
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <p class="error">@Model.ErrorMessage</p>
+        }
+
+        @if (Model.Cards.Count == 0)
+        {
+            <p class="empty">目前沒有待回訊息</p>
+        }
+        else
+        {
+            @foreach (var card in Model.Cards)
+            {
+                <div class="card">
+                    <div class="card-head">
+                        <span class="tag-line">Line</span>
+                        <span class="cust">@card.DisplayName</span>
+                        <span class="count">@card.NewCount 則訊息</span>
+                    </div>
+
+                    <div class="sub">對話紀錄(歷史 @card.History.Count 筆 + 新訊息)</div>
+                    <div class="thread">
+                        @for (var i = 0; i < card.History.Count; i++)
+                        {
+                            var entry = card.History[i];
+                            if (entry.Role == "user" && entry.Status == "skipped")
+                            {
+                                // 連續略過的合併成一行,不然會把有內容的上下文洗掉
+                                var n = 1;
+                                while (i + n < card.History.Count
+                                       && card.History[i + n].Role == "user"
+                                       && card.History[i + n].Status == "skipped")
+                                {
+                                    n++;
+                                }
+                                i += n - 1;
+                                <div class="skipped">@(n == 1 ? "(已略過)" : $"(已略過 {n} 則)")</div>
+                            }
+                            else if (entry.Role == "user")
+                            {
+                                <div class="row them">
+                                    <div class="bubble">@InboxModel.BubbleText(entry)</div>
+                                    <div class="time">@InboxModel.ToTaipeiShort(entry.DisplayTs)</div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="row me">
+                                    <div class="bubble">@InboxModel.BubbleText(entry)</div>
+                                    <div class="time">客服回覆 · @InboxModel.ToTaipeiShort(entry.DisplayTs)</div>
+                                </div>
+                            }
+                        }
+
+                        <div class="divider">▾ 以下為新訊息</div>
+
+                        @foreach (var entry in card.NewMessages)
+                        {
+                            <div class="row them fresh">
+                                <div class="bubble">@InboxModel.BubbleText(entry)</div>
+                                <div class="time">@InboxModel.ToTaipeiShort(entry.DisplayTs) <span class="flag">待回覆</span></div>
+                            </div>
+                        }
+                    </div>
+
+                    <form method="post">
+                        <input type="hidden" name="conversationId" value="@card.ConversationId" />
+                        <textarea name="replyText" required placeholder="輸入回覆內容">@(Model.DraftForId == card.ConversationId ? Model.DraftText : null)</textarea>
+                        <div class="actions">
+                            <button type="submit" class="b-green" asp-page-handler="Draft" formnovalidate>AI 生成草稿</button>
+                            <button type="submit" class="b-green">手動回覆</button>
+                            <button type="submit" class="b-gray" asp-page-handler="Skip" formnovalidate>全部略過</button>
+                            <button type="submit" class="b-red" asp-page-handler="Blacklist" formnovalidate>加入黑名單</button>
+                        </div>
+                    </form>
+                </div>
+            }
+        }
+    </div>
 </body>
 </html>

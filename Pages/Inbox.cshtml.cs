@@ -30,14 +30,26 @@ public class InboxModel : PageModel
         _logger = logger;
     }
 
-    public record InboxItem(long Id, string ConversationId, string? MessageText, DateTime LineTimestamp);
+    /// <summary>
+    /// 對話氣泡一則。Role = user(客戶) / assistant(客服)。
+    /// Ts 是排序用時間(一律客人來訊時間),DisplayTs 才是畫面上要顯示的時間。
+    /// </summary>
+    public record TimelineEntry(
+        string Role, string? Text, DateTime Ts, DateTime DisplayTs, string? MessageType, string Status);
 
-    public IReadOnlyList<InboxItem> Items { get; private set; } = Array.Empty<InboxItem>();
+    public record ConversationCard(
+        string ConversationId,
+        string DisplayName,
+        int NewCount,
+        IReadOnlyList<TimelineEntry> History,
+        IReadOnlyList<TimelineEntry> NewMessages);
+
+    public IReadOnlyList<ConversationCard> Cards { get; private set; } = Array.Empty<ConversationCard>();
 
     [TempData]
     public string? ErrorMessage { get; set; }
 
-    // 草稿只走 TempData 回填畫面,不落庫(TempData 序列化器不支援 long,用字串存 Id)
+    // 草稿只走 TempData 回填畫面,不落庫
     [TempData]
     public string? DraftForId { get; set; }
 
@@ -47,16 +59,136 @@ public class InboxModel : PageModel
     public async Task OnGetAsync()
     {
         await using var conn = new NpgsqlConnection(_connStr);
-        var rows = await conn.QueryAsync<InboxItem>("""
-            SELECT Id, ConversationId, MessageText, LineTimestamp
+
+        // 有待回訊息的對話,依該對話最新待回時間由新到舊
+        var heads = (await conn.QueryAsync<ConversationHead>("""
+            SELECT ConversationId, COUNT(*) AS NewCount, MAX(LineTimestamp) AS LastTs
             FROM Messages
             WHERE SourceType = 'user' AND Status = 'new'
-            ORDER BY LineTimestamp DESC
-            """);
-        Items = rows.AsList();
+            GROUP BY ConversationId
+            ORDER BY LastTs DESC
+            """)).AsList();
+
+        if (heads.Count == 0)
+            return;
+
+        var names = await ResolveDisplayNamesAsync(conn, heads.Select(h => h.ConversationId).ToList());
+
+        var cards = new List<ConversationCard>(heads.Count);
+        foreach (var head in heads)
+        {
+            // 歷史:已回覆/已略過的客戶訊息 + 客服回覆,取最近 20 筆再轉回升冪
+            // 同時間時客戶訊息排在客服回覆之前
+            var history = (await conn.QueryAsync<TimelineEntry>("""
+                SELECT Role, Text, Ts, DisplayTs, MessageType, Status FROM (
+                    SELECT m.LineTimestamp AS Ts, m.LineTimestamp AS DisplayTs, 0 AS Seq, 'user' AS Role,
+                           m.MessageText AS Text, m.MessageType AS MessageType, m.Status AS Status
+                    FROM Messages m
+                    WHERE m.ConversationId = @Cid AND m.SourceType = 'user' AND m.Status <> 'new'
+                    UNION ALL
+                    SELECT m.LineTimestamp AS Ts, r.SentAt AS DisplayTs, 1 AS Seq, 'assistant' AS Role,
+                           r.FinalText AS Text, 'text' AS MessageType, 'replied' AS Status
+                    FROM Replies r
+                    JOIN Messages m ON m.Id = r.MessageId
+                    WHERE m.ConversationId = @Cid
+                ) h
+                ORDER BY Ts DESC, Seq DESC
+                LIMIT 20
+                """, new { Cid = head.ConversationId })).Reverse().ToList();
+
+            var fresh = (await conn.QueryAsync<TimelineEntry>("""
+                SELECT 'user' AS Role, MessageText AS Text, LineTimestamp AS Ts,
+                       LineTimestamp AS DisplayTs, MessageType, Status
+                FROM Messages
+                WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+                ORDER BY LineTimestamp
+                """, new { Cid = head.ConversationId })).AsList();
+
+            names.TryGetValue(head.ConversationId, out var name);
+            cards.Add(new ConversationCard(
+                head.ConversationId,
+                string.IsNullOrWhiteSpace(name) ? ShortId(head.ConversationId) : name,
+                head.NewCount, history, fresh));
+        }
+
+        Cards = cards;
     }
 
-    public async Task<IActionResult> OnPostAsync(long id, string? replyText)
+    private record ConversationHead(string ConversationId, int NewCount, DateTime LastTs);
+
+    private record LineUserRow(string ConversationId, string DisplayName);
+
+    /// <summary>查名字:先查 LineUsers,缺的才打 LINE Profile API。整批有總時限,逾時就這次不查。</summary>
+    private async Task<Dictionary<string, string>> ResolveDisplayNamesAsync(
+        NpgsqlConnection conn, IReadOnlyList<string> conversationIds)
+    {
+        var names = new Dictionary<string, string>();
+        try
+        {
+            var known = await conn.QueryAsync<LineUserRow>(
+                "SELECT ConversationId, DisplayName FROM LineUsers WHERE ConversationId IN @Cids",
+                new { Cids = conversationIds });
+            foreach (var row in known)
+                names[row.ConversationId] = row.DisplayName;
+
+            // 整批查名字的總時限,避免一堆查不到的對話把頁面拖垮
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            foreach (var cid in conversationIds)
+            {
+                if (names.ContainsKey(cid) || cts.IsCancellationRequested)
+                    continue;
+
+                var fetched = await FetchDisplayNameAsync(cid, cts.Token);
+                if (cts.IsCancellationRequested)
+                    continue; // 逾時的不寫庫,下次再試
+
+                // 查不到就把短碼存成名字,讓它變成「已知」不再重複打 API
+                var name = string.IsNullOrWhiteSpace(fetched) ? ShortId(cid) : fetched;
+                names[cid] = name;
+                await conn.ExecuteAsync("""
+                    INSERT INTO LineUsers (ConversationId, DisplayName) VALUES (@Cid, @Name)
+                    ON CONFLICT (ConversationId) DO NOTHING
+                    """, new { Cid = cid, Name = name });
+            }
+        }
+        catch (Exception ex)
+        {
+            // 名字只是點綴,查不到也要把頁面渲染出來
+            _logger.LogWarning(ex, "Resolve display names failed");
+        }
+        return names;
+    }
+
+    private async Task<string?> FetchDisplayNameAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_accessToken))
+            return null;
+
+        try
+        {
+            var http = _httpFactory.CreateClient();
+            using var req = new HttpRequestMessage(
+                HttpMethod.Get, $"https://api.line.me/v2/bot/profile/{Uri.EscapeDataString(userId)}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
+
+            using var resp = await http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("LINE profile failed: {Status}", (int)resp.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            return doc.RootElement.TryGetProperty("displayName", out var prop) ? prop.GetString() : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LINE profile threw");
+            return null;
+        }
+    }
+
+    public async Task<IActionResult> OnPostAsync(string conversationId, string? replyText)
     {
         replyText = replyText?.Trim();
         if (string.IsNullOrEmpty(replyText))
@@ -66,11 +198,11 @@ public class InboxModel : PageModel
         }
 
         await using var conn = new NpgsqlConnection(_connStr);
-        var conversationId = await conn.ExecuteScalarAsync<string?>(
-            "SELECT ConversationId FROM Messages WHERE Id = @Id AND Status = 'new'", new { Id = id });
-        if (conversationId is null)
+        // Replies 掛在該對話最新的那則待回訊息上
+        var anchorId = await conn.ExecuteScalarAsync<long?>(LatestNewIdSql, new { Cid = conversationId });
+        if (anchorId is null)
         {
-            ErrorMessage = $"找不到待回訊息(Id={id})";
+            ErrorMessage = "找不到待回訊息,可能已被其他人處理";
             return RedirectToPage();
         }
 
@@ -83,18 +215,64 @@ public class InboxModel : PageModel
         }
 
         // 送出成功才落庫,兩件事一起成立
-        await conn.OpenAsync();
-        await using var tx = await conn.BeginTransactionAsync();
-        await conn.ExecuteAsync(
-            "INSERT INTO Replies (MessageId, FinalText) VALUES (@MessageId, @FinalText)",
-            new { MessageId = id, FinalText = replyText }, tx);
-        await conn.ExecuteAsync(
-            "UPDATE Messages SET Status = 'replied' WHERE Id = @Id", new { Id = id }, tx);
-        await tx.CommitAsync();
+        try
+        {
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync();
+            await conn.ExecuteAsync(
+                "INSERT INTO Replies (MessageId, FinalText) VALUES (@MessageId, @FinalText)",
+                new { MessageId = anchorId.Value, FinalText = replyText }, tx);
+            await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "replied" }, tx);
+            await tx.CommitAsync();
+        }
+        catch (Exception ex)
+        {
+            // 客人已經收到訊息了,這裡只能如實告知,不重試也不補償
+            _logger.LogError(ex, "Reply pushed but DB update failed for {ConversationId}", conversationId);
+            ErrorMessage = "回覆已送出,但狀態更新失敗,請勿重複送出";
+            return RedirectToPage();
+        }
 
-        _logger.LogInformation("Reply sent for message {MessageId}", id);
+        _logger.LogInformation("Reply sent for conversation {ConversationId}", conversationId);
         return RedirectToPage();
     }
+
+    public async Task<IActionResult> OnPostSkipAsync(string conversationId)
+    {
+        await using var conn = new NpgsqlConnection(_connStr);
+        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped" });
+        _logger.LogInformation("Conversation {ConversationId} skipped", conversationId);
+        return RedirectToPage();
+    }
+
+    public async Task<IActionResult> OnPostBlacklistAsync(string conversationId)
+    {
+        await using var conn = new NpgsqlConnection(_connStr);
+        await conn.OpenAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+        await conn.ExecuteAsync("""
+            INSERT INTO Blacklist (ConversationId, DisplayName)
+            SELECT @Cid, (SELECT DisplayName FROM LineUsers WHERE ConversationId = @Cid)
+            ON CONFLICT (ConversationId) DO NOTHING
+            """, new { Cid = conversationId }, tx);
+        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped" }, tx);
+        await tx.CommitAsync();
+
+        _logger.LogInformation("Conversation {ConversationId} blacklisted", conversationId);
+        return RedirectToPage();
+    }
+
+    private const string LatestNewIdSql = """
+        SELECT Id FROM Messages
+        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+        ORDER BY LineTimestamp DESC, Id DESC
+        LIMIT 1
+        """;
+
+    private const string MarkNewSql = """
+        UPDATE Messages SET Status = @Status
+        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+        """;
 
     /// <summary>成功回 null,失敗回要顯示的錯誤訊息。</summary>
     private async Task<string?> PushAsync(string to, string text)
@@ -131,7 +309,7 @@ public class InboxModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostDraftAsync(long id)
+    public async Task<IActionResult> OnPostDraftAsync(string conversationId)
     {
         if (string.IsNullOrWhiteSpace(_aiBaseUrl) || string.IsNullOrWhiteSpace(_aiApiKey))
         {
@@ -141,12 +319,15 @@ public class InboxModel : PageModel
         }
 
         await using var conn = new NpgsqlConnection(_connStr);
-        var target = await conn.QuerySingleOrDefaultAsync<DraftTarget>(
-            "SELECT ConversationId, LineTimestamp FROM Messages WHERE Id = @Id AND Status = 'new'",
-            new { Id = id });
+        var target = await conn.QuerySingleOrDefaultAsync<DraftTarget>("""
+            SELECT ConversationId, LineTimestamp FROM Messages
+            WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+            ORDER BY LineTimestamp DESC, Id DESC
+            LIMIT 1
+            """, new { Cid = conversationId });
         if (target is null)
         {
-            ErrorMessage = $"找不到待回訊息(Id={id})";
+            ErrorMessage = "找不到待回訊息,可能已被其他人處理";
             return RedirectToPage();
         }
 
@@ -181,7 +362,7 @@ public class InboxModel : PageModel
             return RedirectToPage();
         }
 
-        DraftForId = id.ToString();
+        DraftForId = conversationId;
         DraftText = draft;
         return RedirectToPage();
     }
@@ -237,6 +418,32 @@ public class InboxModel : PageModel
     // 台灣無日光節約,固定 UTC+8
     public static string ToTaipei(DateTime utc) =>
         utc.ToUniversalTime().AddHours(8).ToString("yyyy-MM-dd HH:mm");
+
+    /// <summary>氣泡下方的短時間:MM/dd 上午hh:mm</summary>
+    public static string ToTaipeiShort(DateTime utc)
+    {
+        var t = utc.ToUniversalTime().AddHours(8);
+        var hour12 = t.Hour % 12 == 0 ? 12 : t.Hour % 12;
+        return $"{t:MM/dd} {(t.Hour < 12 ? "上午" : "下午")}{hour12:00}:{t.Minute:00}";
+    }
+
+    /// <summary>非文字訊息沒有內文,依型別給佔位字,避免出現空白泡泡。</summary>
+    public static string BubbleText(TimelineEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Text))
+            return entry.Text;
+
+        return entry.MessageType switch
+        {
+            "sticker" => "[貼圖]",
+            "image" => "[圖片]",
+            "video" => "[影片]",
+            "audio" => "[語音]",
+            "file" => "[檔案]",
+            "location" => "[位置]",
+            _ => "[非文字訊息]",
+        };
+    }
 
     public static string ShortId(string id) =>
         id.Length <= 8 ? id : id[..8] + "…";
