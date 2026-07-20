@@ -35,7 +35,7 @@ public class LoginModel : PageModel
             CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
 
         // 只接受站內相對路徑,避免 open redirect
-        return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToPage("/Inbox");
+        return Url.IsLocalUrl(returnUrl) ? Redirect(returnUrl!) : RedirectToPage("/Index");
     }
 
     private static bool FixedTimeEquals(string? input, string expected) =>

@@ -129,7 +129,7 @@
                         <textarea name="replyText" required placeholder="輸入回覆內容">@(Model.DraftForId == card.ConversationId ? Model.DraftText : null)</textarea>
                         <div class="actions">
                             <button type="submit" class="b-green" asp-page-handler="Draft" formnovalidate>AI 生成草稿</button>
-                            <button type="submit" class="b-green">手動回覆</button>
+                            <button type="submit" class="b-green">送出</button>
                             <button type="submit" class="b-gray" asp-page-handler="Skip" formnovalidate>全部略過</button>
                             <button type="submit" class="b-red" asp-page-handler="Blacklist" formnovalidate>加入黑名單</button>
                         </div>

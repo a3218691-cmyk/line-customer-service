@@ -7,9 +7,10 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHostedService<DailyReportService>();
-// /Inbox、/Blacklist 需登入;webhook / health 是 Minimal API,不受影響
+// /Index、/Inbox、/Blacklist 需登入;webhook / health 是 Minimal API,不受影響
 builder.Services.AddRazorPages(o =>
 {
+    o.Conventions.AuthorizePage("/Index");
     o.Conventions.AuthorizePage("/Inbox");
     o.Conventions.AuthorizePage("/Blacklist");
 });
