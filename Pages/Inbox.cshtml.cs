@@ -60,13 +60,13 @@ public class InboxModel : PageModel
     {
         await using var conn = new NpgsqlConnection(_connStr);
 
-        // 有待回訊息的對話,依該對話最新待回時間由新到舊
+        // 有待回訊息的對話,依該對話最新待回時間由舊到新(最舊在最上,先回等最久的)
         var heads = (await conn.QueryAsync<ConversationHead>("""
             SELECT ConversationId, COUNT(*)::int AS NewCount, MAX(LineTimestamp) AS LastTs
             FROM Messages
             WHERE SourceType = 'user' AND Status = 'new'
             GROUP BY ConversationId
-            ORDER BY LastTs DESC
+            ORDER BY LastTs ASC
             """)).AsList();
 
         if (heads.Count == 0)
