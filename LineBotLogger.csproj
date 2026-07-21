@@ -12,4 +12,9 @@
     <PackageReference Include="Npgsql" Version="8.0.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 審片小幫手:放 wwwroot 外,靠 /review 授權路由送出,不當公開靜態檔 -->
+    <Content Include="Protected\review.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

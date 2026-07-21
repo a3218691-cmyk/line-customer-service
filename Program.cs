@@ -33,6 +33,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapRazorPages();
 
+// 審片小幫手:純前端單檔工具,放 Protected/(非 wwwroot)靠登入把關;檔案缺失回 404 不拖垮主服務
+var reviewPath = Path.Combine(app.Environment.ContentRootPath, "Protected", "review.html");
+app.MapGet("/review", () => File.Exists(reviewPath)
+        ? Results.Content(File.ReadAllText(reviewPath), "text/html; charset=utf-8")
+        : Results.NotFound())
+    .RequireAuthorization();
+
 var connStr = app.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("Missing ConnectionStrings:Default");
 var channelSecret = app.Configuration["Line:ChannelSecret"]

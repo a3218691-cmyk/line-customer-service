@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小關訂閱者專屬審片小幫手</title>
+<style>
+  /* ===== 品牌色與基本設定 ===== */
+  :root {
+    --green: #C3F000;   /* 生機綠 */
+    --orange: #FFAA00;  /* 朝氣橘 */
+    --dark: #1A1A16;    /* 深色底 */
+    --bg: #23231e;
+    --card: #2d2d27;
+    --text: #f2f2ea;
+    --muted: #9a9a8c;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--dark);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 3px solid var(--green);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+  header .ver-tag {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 16px;
+  }
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; }
+  }
+
+  /* ===== 左側：播放器 ===== */
+  .player-col { min-width: 0; }
+  .dropzone {
+    border: 2px dashed var(--muted);
+    border-radius: 16px;
+    padding: 60px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--green);
+    background: rgba(195, 240, 0, .06);
+  }
+  .dropzone .big { font-size: 44px; margin-bottom: 12px; }
+  .dropzone p { color: var(--muted); font-size: 14px; line-height: 1.8; }
+  .dropzone strong { color: var(--green); font-size: 16px; }
+
+  .video-box { display: none; }
+  .video-box.active { display: block; }
+  .file-bar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card);
+    border-radius: 10px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+  .file-bar .fname { color: var(--orange); font-weight: 700; word-break: break-all; }
+  .file-bar .warn { color: var(--muted); font-size: 12px; }
+  .file-bar button {
+    margin-left: auto;
+    background: none; border: 1px solid var(--muted);
+    color: var(--muted); border-radius: 8px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  .file-bar button:hover { border-color: var(--orange); color: var(--orange); }
+
+  /* 影片外框（畫記 canvas 疊在上面）
+     video-wrap 縮到跟影片內容一樣大＝沒有黑邊，
+     畫記座標與影片 1:1 對齊，合成不會偏移 */
+  .video-outer { display: flex; justify-content: center; }
+  .video-wrap { position: relative; display: inline-block; max-width: 100%; }
+  video {
+    display: block;
+    max-width: 100%;
+    max-height: 70vh;
+    width: auto;
+    height: auto;
+    background: #000;
+    border-radius: 14px;
+    outline: none;
+  }
+  /* 進度條（2026-07-20 小關要求：可拖曳跳秒，不用慢慢按） */
+  .seek-bar {
+    padding: 12px 2px 4px;
+    cursor: pointer;
+    touch-action: none;   /* 手指拖曳時不要捲動頁面 */
+    user-select: none;
+  }
+  .seek-track {
+    position: relative;
+    height: 8px;
+    background: #3a3a32;
+    border-radius: 4px;
+  }
+  .seek-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: var(--green);
+    border-radius: 4px;
+  }
+  .seek-thumb {
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    width: 18px; height: 18px;
+    background: var(--green);
+    border: 3px solid var(--dark);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 6px rgba(0,0,0,.6);
+    pointer-events: none;
+  }
+  .seek-bar:hover .seek-thumb, .seek-bar.dragging .seek-thumb {
+    width: 22px; height: 22px;
+  }
+
+  #drawCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;   /* canvas 是替換元素，inset:0 不會自動撐滿，必須明確給尺寸 */
+    height: 100%;
+    display: none;
+    cursor: crosshair;
+    touch-action: none;   /* 手指畫圈時不要捲動頁面 */
+    border-radius: 14px;
+    z-index: 5;
+  }
+  #drawCanvas.active { display: block; }
+
+  /* 畫記工具列 */
+  .draw-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: var(--dark);
+    border: 1px solid var(--orange);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .draw-bar.active { display: flex; }
+  .draw-bar .tip { font-size: 12px; color: var(--muted); }
+  .swatch {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .swatch.sel { border-color: #fff; transform: scale(1.15); }
+  .draw-bar button.op {
+    background: var(--card);
+    border: 1px solid #44443a;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .draw-bar button.op:hover { border-color: var(--green); color: var(--green); }
+
+  /* 畫面文字塊的輸入框（浮在影片上） */
+  #textInput {
+    position: absolute;
+    z-index: 6;
+    display: none;
+    background: rgba(26, 26, 22, .92);
+    border: 1.5px solid var(--green);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: inherit;
+    padding: 6px 10px;
+    outline: none;
+    max-width: 80%;
+  }
+
+  /* 動畫需求選單 */
+  .mini-btn {
+    background: var(--card);
+    border: 1px solid #44443a;
+    color: var(--text);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .mini-btn:hover, .mini-btn.on { border-color: var(--orange); color: var(--orange); }
+  .anim-panel {
+    display: none;
+    background: var(--dark);
+    border: 1px solid #44443a;
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .anim-panel.show { display: block; }
+  .anim-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .anim-chip {
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 20px;
+    border: 1px solid #44443a;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .anim-chip.sel {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: var(--dark);
+    font-weight: 700;
+  }
+  .anim-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+  .ctrl-bar {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; flex-wrap: wrap;
+  }
+  .ctrl-bar button {
+    background: var(--card);
+    border: 1px solid #44443a;
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ctrl-bar button:hover { border-color: var(--green); color: var(--green); }
+  .ctrl-bar #btnDraw.on {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: var(--dark);
+    font-weight: 700;
+  }
+  .ctrl-bar .time-disp {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--green);
+    background: var(--dark);
+    border-radius: 10px;
+    padding: 8px 14px;
+    margin-left: auto;
+  }
+  .hotkey-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.9;
+  }
+  .hotkey-hint kbd {
+    background: var(--dark);
+    border: 1px solid #44443a;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: var(--orange);
+  }
+
+  /* ===== 右側：留言面板 ===== */
+  .panel-col { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+
+  .comment-form {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .comment-form .ts-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--dark);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 10px;
+  }
+  .comment-form .ts-chip.frozen { color: var(--orange); }
+  .comment-form .ts-chip .lock { font-size: 12px; }
+  .draw-pending {
+    display: none;
+    font-size: 12px;
+    color: var(--orange);
+    margin: 0 0 8px 2px;
+  }
+  .draw-pending.show { display: block; }
+  .comment-form textarea {
+    width: 100%;
+    background: var(--dark);
+    border: 1px solid #44443a;
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 70px;
+    outline: none;
+  }
+  .comment-form textarea:focus { border-color: var(--green); }
+  .form-btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-add {
+    flex: 1;
+    background: var(--green);
+    color: var(--dark);
+    border: none;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-add:hover { filter: brightness(1.1); }
+  .btn-cancel {
+    background: none;
+    border: 1px solid #44443a;
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* ===== 留言清單 ===== */
+  .comment-list-box {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 14px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 200px;
+  }
+  .list-head {
+    display: flex; align-items: center;
+    margin-bottom: 10px;
+  }
+  .list-head h2 { font-size: 15px; }
+  .list-head .count {
+    background: var(--orange);
+    color: var(--dark);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 9px;
+    margin-left: 8px;
+  }
+  .comment-list {
+    overflow-y: auto;
+    max-height: 46vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .empty-note { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 0; }
+  .c-item {
+    display: flex;
+    gap: 10px;
+    background: var(--dark);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: border-color .15s;
+  }
+  .c-item:hover { border-color: var(--green); }
+  .c-item img {
+    width: 52px; height: 92px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #000;
+    flex-shrink: 0;
+  }
+  .c-item img.has-draw {
+    width: 76px; height: 134px;
+    border: 1px solid var(--orange);
+  }
+  .c-item .c-body { min-width: 0; flex: 1; }
+  .c-item .c-ts {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+  .c-item .c-cat { font-size: 12px; color: var(--orange); margin-left: 6px; }
+  .c-item .c-draw-tag { font-size: 11px; color: var(--orange); margin-left: 6px; }
+  .c-item .c-text { font-size: 14px; line-height: 1.6; margin-top: 4px; word-break: break-word; white-space: pre-wrap; }
+  .c-item .c-ops { display: flex; flex-direction: column; gap: 6px; }
+  .c-item .c-ops button {
+    background: none; border: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px;
+  }
+  .c-item .c-ops button:hover { color: var(--orange); }
+
+  /* ===== 字幕校對 ===== */
+  .sub-list {
+    overflow-y: auto;
+    max-height: 40vh;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sub-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 5px 6px;
+    border-radius: 8px;
+  }
+  .sub-row.current { background: rgba(195, 240, 0, .1); }
+  .sub-time {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+    background: var(--dark);
+    border-radius: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+    border: none;
+  }
+  .sub-time:hover { color: var(--orange); }
+  .sub-inputs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .sub-inputs input {
+    width: 100%;
+    background: var(--dark);
+    border: 1px solid #3a3a32;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    padding: 5px 8px;
+    outline: none;
+  }
+  .sub-inputs input.sub-en { font-size: 12px; color: var(--muted); }
+  .sub-inputs input:focus { border-color: var(--green); }
+  .sub-row.edited input.changed { border-color: var(--orange); color: var(--orange); }
+  .sub-orig {
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: line-through;
+    padding-left: 2px;
+  }
+
+  /* ===== 匯出 ===== */
+  .export-box { display: flex; gap: 8px; }
+  .btn-export {
+    flex: 1;
+    background: var(--orange);
+    color: var(--dark);
+    border: none;
+    border-radius: 12px;
+    padding: 13px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-export:hover { filter: brightness(1.1); }
+  .btn-copy {
+    background: var(--card);
+    border: 1px solid var(--orange);
+    color: var(--orange);
+    border-radius: 12px;
+    padding: 13px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* 燈箱（點縮圖放大看畫記） */
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    cursor: zoom-out;
+  }
+  #lightbox.show { display: flex; }
+  #lightbox img {
+    max-width: 92vw;
+    max-height: 92vh;
+    border-radius: 10px;
+  }
+
+  /* toast 提示 */
+  #toast {
+    position: fixed;
+    bottom: 26px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--green);
+    color: var(--dark);
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 22px;
+    border-radius: 30px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s;
+    z-index: 300;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>小關訂閱者專屬審片小幫手</h1>
+  <span class="ver-tag">留言自帶時間碼 → 匯出給 Claude 改片</span>
+</header>
+
+<div class="wrap">
+
+  <!-- ===== 左側：影片區 ===== -->
+  <div class="player-col">
+
+    <!-- 未載入影片：拖放區 -->
+    <div class="dropzone" id="dropzone">
+      <div class="big">🎬</div>
+      <p><strong>把要審的影片拖進來</strong><br>或點這裡選檔（mp4 / mov）<br><br>
+      注意：請丟「最新一版」的成品，留言時間碼是對這一版的時間軸</p>
+      <input type="file" id="fileInput" accept="video/*" hidden>
+    </div>
+
+    <!-- 已載入影片 -->
+    <div class="video-box" id="videoBox">
+      <div class="file-bar">
+        <span>本輪審片版本：</span>
+        <span class="fname" id="fnameDisp"></span>
+        <span class="warn" id="restoreNote"></span>
+        <button id="btnChangeFile">換影片</button>
+      </div>
+
+      <!-- 畫記工具列（按 ✏️ 畫記才出現） -->
+      <div class="draw-bar" id="drawBar">
+        <span class="tip">🖊️ 直接在畫面上圈：</span>
+        <div class="swatch sel" data-color="#FFAA00" style="background:#FFAA00" title="橘"></div>
+        <div class="swatch" data-color="#C3F000" style="background:#C3F000" title="綠"></div>
+        <div class="swatch" data-color="#FF4444" style="background:#FF4444" title="紅"></div>
+        <div class="swatch" data-color="#FFFFFF" style="background:#FFFFFF" title="白"></div>
+        <button class="op" id="btnUndo">↩︎ 復原</button>
+        <button class="op" id="btnClearDraw">🗑 清除</button>
+        <button class="op" id="btnRemoveInset" style="display:none">🖼 移除插圖</button>
+        <button class="op" id="btnTextSmaller" style="display:none">A−</button>
+        <button class="op" id="btnTextBigger" style="display:none">A＋</button>
+        <button class="op" id="btnDelText" style="display:none">✕ 刪文字</button>
+        <button class="op" id="btnDoneDraw">✓ 畫完了</button>
+        <span class="tip">畫完到右邊打留言，圈圈／插圖會跟留言一起送出</span>
+      </div>
+
+      <div class="video-outer">
+        <div class="video-wrap">
+          <video id="video" playsinline></video>
+          <canvas id="drawCanvas"></canvas>
+          <input id="textInput" placeholder="打字，Enter 放上畫面">
+        </div>
+      </div>
+
+      <div class="seek-bar" id="seekBar">
+        <div class="seek-track">
+          <div class="seek-fill" id="seekFill"></div>
+          <div class="seek-thumb" id="seekThumb"></div>
+        </div>
+      </div>
+
+      <div class="ctrl-bar">
+        <button id="btnPlay">▶︎ 播放</button>
+        <button data-seek="-5">⏪ -5s</button>
+        <button data-seek="-1">◀︎ -1s</button>
+        <button data-seek="1">▶︎ +1s</button>
+        <button data-seek="5">⏩ +5s</button>
+        <button data-frame="-1">｜◀ 上一格</button>
+        <button data-frame="1">▶｜ 下一格</button>
+        <button id="btnDraw">✏️ 畫記</button>
+        <button id="btnInset">🖼️ 插圖</button>
+        <button id="btnText">🔤 文字</button>
+        <input type="file" id="insetInput" accept="image/*" hidden>
+        <div class="time-disp" id="timeDisp">00:00.0 / 00:00.0</div>
+      </div>
+      <div class="hotkey-hint">
+        快捷鍵：<kbd>空白鍵</kbd> 播放/暫停　<kbd>←</kbd><kbd>→</kbd> ±1 秒　<kbd>Shift+←→</kbd> ±5 秒　<kbd>,</kbd><kbd>.</kbd> 逐格　<kbd>D</kbd> 畫記　<kbd>Enter</kbd>（留言框內）送出留言
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 右側：留言面板 ===== -->
+  <div class="panel-col">
+
+    <div class="comment-form">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div class="ts-chip" id="tsChip">⏱ 00:00.0</div>
+        <button class="mini-btn" id="btnAnim">🎬 動畫需求</button>
+      </div>
+      <div class="anim-panel" id="animPanel">
+        <div class="anim-chips" id="animChips"></div>
+        <div class="anim-desc" id="animDesc">點一種動畫類型看說明；內容細節寫在下方留言、位置用畫記圈或文字塊標</div>
+      </div>
+      <div class="draw-pending" id="drawPending">🖊️ 已畫 <span id="strokeCount">0</span> 筆，會跟這條留言一起送出</div>
+      <div class="draw-pending" id="insetPending">🖼️ 插圖已擺上畫面（可拖曳移動、拉右下角調大小），會跟這條留言一起送出</div>
+      <div class="draw-pending" id="textPending">🔤 畫面文字 <span id="textCount">0</span> 塊（可拖曳移動、A±調大小），會跟這條留言一起送出</div>
+      <div class="draw-pending" id="animPending">🎬 動畫需求：<span id="animSel"></span></div>
+      <textarea id="commentInput" placeholder="暫停在要改的畫面，在這裡打修改指令…&#10;（一開始打字或畫圈，時間點就會鎖定）"></textarea>
+      <div class="form-btns">
+        <button class="btn-add" id="btnAdd">＋ 加入留言</button>
+        <button class="btn-cancel" id="btnClear">清空</button>
+      </div>
+    </div>
+
+    <div class="comment-list-box">
+      <div class="list-head">
+        <h2>📋 修改清單</h2>
+        <span class="count" id="countBadge">0</span>
+      </div>
+      <div class="comment-list" id="commentList">
+        <div class="empty-note">還沒有留言。<br>看片 → 暫停 → 打修改指令 → 加入留言</div>
+      </div>
+    </div>
+
+    <div class="comment-list-box">
+      <div class="list-head">
+        <h2>📝 字幕校對</h2>
+        <span class="count" id="subBadge" style="display:none">0</span>
+        <button class="mini-btn" id="btnLoadSubs" style="margin-left:auto">載入字幕檔</button>
+        <input type="file" id="subsInput" accept=".json,.srt" hidden>
+      </div>
+      <div class="sub-list" id="subList">
+        <div class="empty-note">Claude 交付影片時會附「審片字幕_版本.json」，<br>拖進頁面或按「載入字幕檔」。<br>點時間碼跳到那句，直接在字上改錯字。</div>
+      </div>
+    </div>
+
+    <div class="export-box">
+      <button class="btn-export" id="btnExport">📤 匯出審片意見（.md）</button>
+      <button class="btn-copy" id="btnCopy">複製文字</button>
+    </div>
+
+  </div>
+</div>
+
+<div id="lightbox"><img id="lightboxImg" alt=""></div>
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   審片小幫手 — 純本地運作，資料存 localStorage（依檔名分開）
+   留言可附「畫記」（在暫停畫面上圈重點），匯出 .md 給
+   Claude Code 讀取後批次改片
+   ========================================================= */
+
+const FPS = 24; // 成品輸出是 24fps，逐格步進用 1/24 秒
+
+const $ = id => document.getElementById(id);
+const video = $('video');
+const dropzone = $('dropzone');
+const fileInput = $('fileInput');
+const videoBox = $('videoBox');
+const commentInput = $('commentInput');
+const tsChip = $('tsChip');
+const drawCanvas = $('drawCanvas');
+const drawBar = $('drawBar');
+const btnDraw = $('btnDraw');
+
+let currentFile = null;      // 目前載入的檔名
+let comments = [];           // { id, ts, cat, text, thumb, draw }
+let frozenTs = null;         // 打字／畫圈當下鎖定的時間點
+let frozenThumb = null;      // 鎖定時抓的小縮圖
+let frozenFrame = null;      // 鎖定時抓的大畫格（canvas，供畫記合成用）
+
+/* ---------- 畫記狀態 ---------- */
+let drawActive = false;
+let strokes = [];            // [{ color, points:[{x,y} 相對 canvas 0~1] }]
+let curStroke = null;
+let penColor = '#FFAA00';
+let drawDims = { cw: 0, ch: 0 };  // 畫圈當下的 canvas CSS 尺寸（合成映射用）
+
+/* ---------- 插圖狀態 ---------- */
+let inset = null;            // { imgEl, src, nw, nh, x, y, w }（x/y=中心、w=寬，皆為 0~1 相對畫面）
+let dragMode = null;         // null | 'move' | 'resize' | 'text'
+let dragStart = null;
+
+/* ---------- 畫面文字塊狀態 ---------- */
+let texts = [];              // [{ id, str, x, y, size, color }]（x/y=左上角 0~1、size=字高相對畫面寬）
+let selText = null;          // 選取中的文字塊 id
+let textPlaceMode = false;   // 等待點畫面決定文字位置
+
+/* ---------- 字幕校對狀態 ---------- */
+let subs = [];               // [{ start, end, text, en, origText, origEn }]
+let curSubIdx = -1;          // 播放中目前這句的 index（同步高亮用）
+
+/* ---------- 動畫需求 ---------- */
+let anim = null;             // 選定的動畫類型名稱
+const ANIM_TYPES = [
+  { name: '數字滾動',   desc: '數字從 0 滾動跳到目標值——講營收、數量、百分比時用' },
+  { name: '圖表長出',   desc: '長條圖／曲線動態長出來——講比較、趨勢、成長時用' },
+  { name: '文字逐字彈出', desc: '標題或金句一個字一個字彈出來——強調重點句' },
+  { name: '箭頭指向',   desc: '箭頭飛入指向畫面某處——搭配畫記圈標出指到哪' },
+  { name: '螢光筆掃過', desc: 'highlight 底色從左掃到右劃過關鍵字' },
+  { name: '卡片彈入',   desc: '資訊卡從旁邊彈入（多張會依序進場）——列點、步驟時用' },
+  { name: '放大強調',   desc: '畫面局部 zoom 突然放大強調——搭配畫記圈標出放大哪裡' },
+  { name: '自由描述',   desc: '以上都不是——想要的效果直接用文字描述在留言裡' }
+];
+
+// 插圖的 normalized 高（依原圖比例換算）
+function insetNormH() {
+  return inset.w * (inset.nh / inset.nw) * (drawDims.cw / drawDims.ch);
+}
+// 插圖的 normalized 邊界框
+function insetBounds() {
+  const h = insetNormH();
+  return { l: inset.x - inset.w / 2, t: inset.y - h / 2, w: inset.w, h };
+}
+
+/* ---------- 時間格式 ---------- */
+function fmt(t) {
+  if (!isFinite(t)) t = 0;
+  const m = Math.floor(t / 60);
+  const s = (t % 60).toFixed(1).padStart(4, '0');
+  return String(m).padStart(2, '0') + ':' + s;
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+/* ---------- 載入影片 ---------- */
+function loadFile(file) {
+  if (!file || !file.type.startsWith('video')) { toast('請選影片檔'); return; }
+  currentFile = file.name;
+  video.src = URL.createObjectURL(file);
+  $('fnameDisp').textContent = file.name;
+  dropzone.style.display = 'none';
+  videoBox.classList.add('active');
+  exitDrawMode();
+  resetForm();
+
+  // 還原這支影片之前的留言（防不小心關掉頁面）
+  const saved = localStorage.getItem('review_' + currentFile);
+  comments = saved ? JSON.parse(saved) : [];
+  $('restoreNote').textContent = comments.length ? `（已還原 ${comments.length} 條先前留言）` : '';
+  renderList();
+  // 換影片時清掉字幕清單（要重載對應版本的字幕檔）
+  subs = [];
+  curSubIdx = -1;
+  renderSubs();
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', () => dropzone.classList.remove('dragover'));  // 載入交給 body 統一處理
+// 拖檔統一處理：影片＋字幕檔可以一起框選、一次拖進來
+// 影片＝載入／換片、json/srt＝字幕檔、單張圖片＝插圖
+document.body.addEventListener('dragover', e => e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const files = [...e.dataTransfer.files];
+  if (!files.length) return;
+  const vid = files.find(f => f.type.startsWith('video') || /\.(mp4|mov|m4v)$/i.test(f.name));
+  const sub = files.find(f => /\.(json|srt)$/i.test(f.name));
+  const img = files.find(f => f.type.startsWith('image'));
+  if (vid) loadFile(vid);
+  if (sub && (vid || currentFile)) loadSubsFile(sub);
+  if (!vid && !sub && img && currentFile) loadInsetFile(img);
+});
+$('btnChangeFile').addEventListener('click', () => fileInput.click());
+
+/* ---------- 播放控制 ---------- */
+$('btnPlay').addEventListener('click', togglePlay);
+function togglePlay() {
+  if (video.paused) video.play(); else video.pause();
+}
+video.addEventListener('play', () => {
+  $('btnPlay').textContent = '⏸ 暫停';
+  if (drawActive) exitDrawMode(true);  // 播放時收起畫布（已畫的筆跡保留，跟留言一起送出）
+});
+video.addEventListener('pause', () => $('btnPlay').textContent = '▶︎ 播放');
+video.addEventListener('timeupdate', updateTime);
+video.addEventListener('loadedmetadata', updateTime);
+function updateTime() {
+  $('timeDisp').textContent = fmt(video.currentTime) + ' / ' + fmt(video.duration);
+  if (frozenTs === null) tsChip.textContent = '⏱ ' + fmt(video.currentTime);
+  updateSeekUI();
+  syncSubHighlight();
+}
+
+/* ---------- 進度條拖曳（2026-07-20：點哪跳哪、按住直接拉） ---------- */
+const seekBar = $('seekBar');
+function updateSeekUI() {
+  if (!video.duration) return;
+  const pct = (video.currentTime / video.duration) * 100;
+  $('seekFill').style.width = pct + '%';
+  $('seekThumb').style.left = pct + '%';
+}
+let seekWasPlaying = false;
+function seekToEvent(e) {
+  if (!video.duration) return;
+  const r = seekBar.querySelector('.seek-track').getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  video.currentTime = frac * video.duration;
+  updateSeekUI();   // 拖曳中即時跟手，不等 timeupdate
+}
+seekBar.addEventListener('pointerdown', e => {
+  try { seekBar.setPointerCapture(e.pointerId); } catch (_) {}  // 合成事件沒有有效 pointerId 會丟例外
+  seekBar.classList.add('dragging');
+  seekWasPlaying = !video.paused;
+  video.pause();            // 拖曳中先暫停，畫面跟著刷
+  seekToEvent(e);
+});
+seekBar.addEventListener('pointermove', e => {
+  if (seekBar.classList.contains('dragging')) seekToEvent(e);
+});
+seekBar.addEventListener('pointerup', e => {
+  seekBar.classList.remove('dragging');
+  try { seekBar.releasePointerCapture(e.pointerId); } catch (_) {}
+  if (seekWasPlaying) video.play();   // 原本在播就接著播
+});
+seekBar.addEventListener('pointercancel', () => seekBar.classList.remove('dragging'));
+
+document.querySelectorAll('[data-seek]').forEach(b =>
+  b.addEventListener('click', () => { video.currentTime += Number(b.dataset.seek); }));
+document.querySelectorAll('[data-frame]').forEach(b =>
+  b.addEventListener('click', () => { video.pause(); video.currentTime += Number(b.dataset.frame) / FPS; }));
+
+/* ---------- 快捷鍵 ---------- */
+document.addEventListener('keydown', e => {
+  if (e.target === $('textInput')) return;  // 畫面文字輸入框有自己的處理
+  const typing = e.target === commentInput;
+  if (typing) {
+    // 留言框內 Enter 送出（Shift+Enter 換行）
+    // ⚠️ 注音輸入法「選字確認」的 Enter 不算送出（isComposing / keyCode 229）
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      addComment();
+    }
+    return;
+  }
+  // 在任何輸入框（含字幕校對）打字時，不觸發播放快捷鍵
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (!currentFile) return;
+  switch (e.key) {
+    case ' ':           e.preventDefault(); togglePlay(); break;
+    case 'ArrowLeft':   e.preventDefault(); video.currentTime -= e.shiftKey ? 5 : 1; break;
+    case 'ArrowRight':  e.preventDefault(); video.currentTime += e.shiftKey ? 5 : 1; break;
+    case ',':           video.pause(); video.currentTime -= 1 / FPS; break;
+    case '.':           video.pause(); video.currentTime += 1 / FPS; break;
+    case 'd': case 'D': toggleDrawMode(); break;
+  }
+});
+
+/* ---------- 抓畫格 ---------- */
+function grabFrameCanvas(targetW) {
+  try {
+    if (!video.videoWidth) return null;
+    const w = Math.min(targetW, video.videoWidth);
+    const h = Math.round(w * video.videoHeight / video.videoWidth);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(video, 0, 0, w, h);
+    return c;
+  } catch (err) { return null; }
+}
+function grabThumb() {
+  const c = grabFrameCanvas(120);
+  return c ? c.toDataURL('image/jpeg', .6) : null;
+}
+
+/* ---------- 時間點鎖定（打字或畫第一筆都會觸發） ---------- */
+function freezeTs() {
+  if (frozenTs !== null) return;
+  frozenTs = video.currentTime;
+  frozenThumb = grabThumb();
+  frozenFrame = grabFrameCanvas(720);  // 大畫格留給畫記合成
+  tsChip.classList.add('frozen');
+  tsChip.innerHTML = '🔒 ' + fmt(frozenTs) + ' <span class="lock">（已鎖定）</span>';
+}
+
+commentInput.addEventListener('input', () => {
+  if (commentInput.value.trim() !== '') freezeTs();
+});
+
+function resetForm() {
+  commentInput.value = '';
+  frozenTs = null;
+  frozenThumb = null;
+  frozenFrame = null;
+  inset = null;
+  texts = [];
+  selText = null;
+  anim = null;
+  document.querySelectorAll('.anim-chip').forEach(c => c.classList.remove('sel'));
+  $('animPanel').classList.remove('show');
+  hideTextInput();
+  clearStrokes();
+  exitDrawMode();
+  tsChip.classList.remove('frozen');
+  tsChip.textContent = '⏱ ' + fmt(video.currentTime || 0);
+}
+$('btnClear').addEventListener('click', resetForm);
+
+/* =========================================================
+   畫記功能（在暫停畫面上圈重點）
+   ========================================================= */
+btnDraw.addEventListener('click', toggleDrawMode);
+$('btnDoneDraw').addEventListener('click', () => exitDrawMode(true));
+$('btnUndo').addEventListener('click', () => { strokes.pop(); redraw(); updateDrawUI(); });
+$('btnClearDraw').addEventListener('click', () => { clearStrokes(); redraw(); });
+
+document.querySelectorAll('.swatch').forEach(s =>
+  s.addEventListener('click', () => {
+    penColor = s.dataset.color;
+    document.querySelectorAll('.swatch').forEach(x => x.classList.toggle('sel', x === s));
+  }));
+
+function toggleDrawMode() {
+  if (drawActive) exitDrawMode(true);
+  else enterDrawMode();
+}
+
+function enterDrawMode() {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  video.pause();
+  drawActive = true;
+  drawCanvas.classList.add('active');
+  drawBar.classList.add('active');
+  btnDraw.classList.add('on');
+  sizeCanvas();
+  redraw();
+}
+
+function exitDrawMode(keep) {
+  drawActive = false;
+  drawCanvas.classList.remove('active');
+  drawBar.classList.remove('active');
+  btnDraw.classList.remove('on');
+  textPlaceMode = false;
+  hideTextInput();
+  if (!keep) { clearStrokes(); texts = []; selText = null; inset = null; }
+  updateDrawUI();
+}
+
+function clearStrokes() {
+  strokes = [];
+  curStroke = null;
+  updateDrawUI();
+}
+
+function updateDrawUI() {
+  $('strokeCount').textContent = strokes.length;
+  $('drawPending').classList.toggle('show', strokes.length > 0);
+  $('insetPending').classList.toggle('show', !!inset);
+  $('btnRemoveInset').style.display = inset ? '' : 'none';
+  $('textCount').textContent = texts.length;
+  $('textPending').classList.toggle('show', texts.length > 0);
+  const hasSel = selText !== null && texts.some(t => t.id === selText);
+  ['btnTextSmaller', 'btnTextBigger', 'btnDelText'].forEach(id => $(id).style.display = hasSel ? '' : 'none');
+  $('animPending').classList.toggle('show', !!anim);
+  $('animSel').textContent = anim || '';
+  $('btnAnim').classList.toggle('on', !!anim);
+  btnDraw.textContent = strokes.length ? `✏️ 畫記(${strokes.length})` : '✏️ 畫記';
+}
+
+// canvas 尺寸對齊影片元素（含 retina 縮放）
+function sizeCanvas() {
+  const cw = drawCanvas.clientWidth || video.clientWidth;
+  const ch = drawCanvas.clientHeight || video.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  drawCanvas.width = Math.round(cw * dpr);
+  drawCanvas.height = Math.round(ch * dpr);
+  drawCanvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawDims = { cw, ch };
+}
+window.addEventListener('resize', () => { if (drawActive) { sizeCanvas(); redraw(); } });
+
+function redraw() {
+  const ctx = drawCanvas.getContext('2d');
+  const { cw, ch } = drawDims;
+  ctx.clearRect(0, 0, cw, ch);
+
+  // 插圖（在筆跡下層）＋選取框＋右下角縮放把手＋尺寸標籤
+  if (inset && inset.imgEl) {
+    const b = insetBounds();
+    ctx.drawImage(inset.imgEl, b.l * cw, b.t * ch, b.w * cw, b.h * ch);
+    ctx.save();
+    ctx.strokeStyle = '#C3F000';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(b.l * cw, b.t * ch, b.w * cw, b.h * ch);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#C3F000';
+    ctx.fillRect((b.l + b.w) * cw - 7, (b.t + b.h) * ch - 7, 14, 14);   // 縮放把手
+    const label = `寬 ${Math.round(inset.w * 100)}%`;
+    ctx.font = '700 12px sans-serif';
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(26,26,22,.85)';
+    ctx.fillRect(b.l * cw, b.t * ch - 20, tw + 12, 18);
+    ctx.fillStyle = '#C3F000';
+    ctx.fillText(label, b.l * cw + 6, b.t * ch - 6);
+    ctx.restore();
+  }
+
+  // 畫面文字塊（附深色描邊確保看得清楚）＋選取框
+  texts.forEach(t => {
+    const fs = t.size * cw;
+    ctx.font = `700 ${fs}px "PingFang TC", sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, fs * .15);
+    ctx.strokeStyle = 'rgba(0,0,0,.85)';
+    ctx.strokeText(t.str, t.x * cw, t.y * ch);
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.str, t.x * cw, t.y * ch);
+    if (t.id === selText) {
+      const b = textBBox(t);
+      ctx.save();
+      ctx.strokeStyle = '#C3F000';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.strokeRect(b.l * cw - 4, b.t * ch - 4, b.w * cw + 8, b.h * ch + 8);
+      ctx.restore();
+    }
+  });
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 4;
+  const paint = s => {
+    ctx.strokeStyle = s.color;
+    ctx.beginPath();
+    s.points.forEach((p, i) => {
+      const x = p.x * cw, y = p.y * ch;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  };
+  strokes.forEach(paint);
+  if (curStroke) paint(curStroke);
+}
+
+// 畫筆／插圖操作事件（滑鼠／觸控通用）
+// 優先序：點到插圖縮放把手 → 縮放；點在插圖內 → 移動；其他 → 畫筆
+drawCanvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  freezeTs();  // 第一筆就鎖定時間點
+  try { drawCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+  const r = drawCanvas.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+  // 文字放置模式：這一下點擊決定文字位置，叫出輸入框
+  if (textPlaceMode) {
+    textPlaceMode = false;
+    showTextInput(px, py);
+    return;
+  }
+  // 文字塊命中測試（最上層，倒序找最後放的）
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const b = textBBox(texts[i]);
+    if (px >= b.l - .01 && px <= b.l + b.w + .01 && py >= b.t - .01 && py <= b.t + b.h + .01) {
+      selText = texts[i].id;
+      dragMode = 'text';
+      dragStart = { px, py, x: texts[i].x, y: texts[i].y, id: texts[i].id };
+      redraw();
+      updateDrawUI();
+      return;
+    }
+  }
+  if (selText !== null) { selText = null; updateDrawUI(); }
+  if (inset) {
+    const b = insetBounds();
+    const hx = (b.l + b.w) * r.width, hy = (b.t + b.h) * r.height;   // 把手中心（px）
+    if (Math.abs(px * r.width - hx) < 18 && Math.abs(py * r.height - hy) < 18) {
+      dragMode = 'resize';
+      dragStart = { tlx: b.l, tly: b.t };
+      return;
+    }
+    if (px >= b.l && px <= b.l + b.w && py >= b.t && py <= b.t + b.h) {
+      dragMode = 'move';
+      dragStart = { px, py, x: inset.x, y: inset.y };
+      return;
+    }
+  }
+  curStroke = { color: penColor, points: [{ x: px, y: py }] };
+});
+drawCanvas.addEventListener('pointermove', e => {
+  if (!curStroke && !dragMode) return;
+  const r = drawCanvas.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+  if (dragMode === 'text') {
+    const t = texts.find(t => t.id === dragStart.id);
+    if (t) { t.x = dragStart.x + (px - dragStart.px); t.y = dragStart.y + (py - dragStart.py); redraw(); }
+    return;
+  }
+  if (dragMode === 'move') {
+    inset.x = dragStart.x + (px - dragStart.px);
+    inset.y = dragStart.y + (py - dragStart.py);
+    redraw();
+    return;
+  }
+  if (dragMode === 'resize') {
+    // 以左上角為錨點縮放，最小 8%、最大 150%
+    inset.w = Math.min(1.5, Math.max(0.08, px - dragStart.tlx));
+    inset.x = dragStart.tlx + inset.w / 2;
+    inset.y = dragStart.tly + insetNormH() / 2;
+    redraw();
+    return;
+  }
+  curStroke.points.push({ x: px, y: py });
+  redraw();
+});
+function endStroke() {
+  dragMode = null;
+  dragStart = null;
+  if (!curStroke) return;
+  if (curStroke.points.length > 1) strokes.push(curStroke);
+  curStroke = null;
+  redraw();
+  updateDrawUI();
+}
+drawCanvas.addEventListener('pointerup', endStroke);
+drawCanvas.addEventListener('pointercancel', endStroke);
+
+/* ---------- 插圖載入 ---------- */
+$('btnInset').addEventListener('click', () => {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  $('insetInput').click();
+});
+$('insetInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) loadInsetFile(f);
+});
+$('btnRemoveInset').addEventListener('click', () => {
+  inset = null;
+  redraw();
+  updateDrawUI();
+});
+
+function loadInsetFile(f) {
+  if (!f.type.startsWith('image')) { toast('請選圖片檔'); return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      // 過大的圖縮到 1280 寬（省儲存空間；PNG 保留透明背景）
+      let src = rd.result;
+      if (img.naturalWidth > 1280) {
+        const c = document.createElement('canvas');
+        c.width = 1280;
+        c.height = Math.round(img.naturalHeight * 1280 / img.naturalWidth);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        src = f.type === 'image/png' ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', .85);
+      }
+      video.pause();
+      freezeTs();
+      inset = { imgEl: img, src, nw: img.naturalWidth, nh: img.naturalHeight, x: .5, y: .5, w: .5 };
+      if (!drawActive) enterDrawMode(); else redraw();
+      updateDrawUI();
+      toast('拖曳移動插圖、拉右下角的方塊調大小');
+    };
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+
+/* =========================================================
+   畫面文字塊（在影片上直接放字）
+   ========================================================= */
+const textInput = $('textInput');
+let textPos = { x: .5, y: .5 };   // 輸入框對應的文字位置（左上角 normalized）
+
+function textBBox(t) {
+  const { cw, ch } = drawDims;
+  const c2 = drawCanvas.getContext('2d');
+  c2.font = `700 ${t.size * cw}px "PingFang TC", sans-serif`;
+  return { l: t.x, t: t.y, w: c2.measureText(t.str).width / cw, h: t.size * 1.25 * cw / ch };
+}
+
+$('btnText').addEventListener('click', () => {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  video.pause();
+  if (!drawActive) enterDrawMode();
+  textPlaceMode = true;
+  toast('點畫面上要放字的位置');
+});
+
+function showTextInput(nx, ny) {
+  textPos = { x: nx, y: ny };
+  textInput.style.left = (nx * 100) + '%';
+  textInput.style.top = (ny * 100) + '%';
+  textInput.style.display = 'block';
+  textInput.value = '';
+  textInput.focus();
+}
+function hideTextInput() {
+  if (textInput) textInput.style.display = 'none';
+}
+
+textInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (e.isComposing || e.keyCode === 229) return;  // 注音選字的 Enter 不算
+    e.preventDefault();
+    const str = textInput.value.trim();
+    hideTextInput();
+    if (!str) return;
+    freezeTs();
+    const t = { id: Date.now(), str, x: textPos.x, y: textPos.y, size: .045, color: penColor };
+    texts.push(t);
+    selText = t.id;
+    redraw();
+    updateDrawUI();
+  }
+  if (e.key === 'Escape') hideTextInput();
+});
+
+// 選取中的文字塊：調大小／刪除
+$('btnTextBigger').addEventListener('click', () => {
+  const t = texts.find(t => t.id === selText);
+  if (t) { t.size = Math.min(.12, t.size * 1.18); redraw(); }
+});
+$('btnTextSmaller').addEventListener('click', () => {
+  const t = texts.find(t => t.id === selText);
+  if (t) { t.size = Math.max(.02, t.size / 1.18); redraw(); }
+});
+$('btnDelText').addEventListener('click', () => {
+  texts = texts.filter(t => t.id !== selText);
+  selText = null;
+  redraw();
+  updateDrawUI();
+});
+
+/* =========================================================
+   動畫需求選單
+   ========================================================= */
+$('animChips').innerHTML = ANIM_TYPES.map(a =>
+  `<span class="anim-chip" data-name="${a.name}">${a.name}</span>`).join('');
+
+$('btnAnim').addEventListener('click', () => {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  $('animPanel').classList.toggle('show');
+});
+$('animChips').addEventListener('click', e => {
+  const chip = e.target.closest('.anim-chip');
+  if (!chip) return;
+  const name = chip.dataset.name;
+  if (anim === name) {              // 再點一次取消選取
+    anim = null;
+    chip.classList.remove('sel');
+    $('animDesc').textContent = '點一種動畫類型看說明；內容細節寫在下方留言、位置用畫記圈或文字塊標';
+  } else {
+    anim = name;
+    document.querySelectorAll('.anim-chip').forEach(c => c.classList.toggle('sel', c === chip));
+    $('animDesc').textContent = ANIM_TYPES.find(a => a.name === name).desc;
+    freezeTs();
+    commentInput.focus();           // 引導接著寫內容細節
+  }
+  updateDrawUI();
+});
+
+/* =========================================================
+   字幕校對（載入 Claude 附的字幕檔，逐句直接改錯字）
+   ========================================================= */
+$('btnLoadSubs').addEventListener('click', () => {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  $('subsInput').click();
+});
+$('subsInput').addEventListener('change', e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) loadSubsFile(f);
+});
+
+// SRT 格式解析（備用；主要格式是 json）
+function parseSrt(txt) {
+  const toSec = t => {
+    const m = t.trim().match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+    return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 1000;
+  };
+  return txt.replace(/\r/g, '').split(/\n\n+/).map(block => {
+    const lines = block.trim().split('\n');
+    const timeLine = lines.find(l => l.includes('-->'));
+    if (!timeLine) return null;
+    const [a, b] = timeLine.split('-->');
+    const textLines = lines.slice(lines.indexOf(timeLine) + 1);
+    return { start: toSec(a), end: toSec(b), text: textLines.join(' ') };
+  }).filter(Boolean);
+}
+
+function loadSubsFile(f) {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      let arr;
+      if (f.name.toLowerCase().endsWith('.srt')) arr = parseSrt(rd.result);
+      else {
+        const j = JSON.parse(rd.result);
+        arr = Array.isArray(j) ? j : (j.subs || []);
+      }
+      subs = arr.map(s => ({
+        start: +s.start, end: +s.end,
+        text: s.text || '', en: s.en || '',
+        origText: s.text || '', origEn: s.en || ''
+      }));
+      // 套回這支影片先前存過的修改（防不小心關頁面）
+      const saved = JSON.parse(localStorage.getItem('subs_' + currentFile) || 'null');
+      if (saved) saved.forEach(e => {
+        const s = subs[e.i];
+        if (s && s.origText === e.origText) { s.text = e.text; if (e.en != null) s.en = e.en; }
+      });
+      renderSubs();
+      toast(`已載入 ${subs.length} 句字幕，直接在字上改`);
+    } catch (err) { toast('字幕檔格式看不懂'); }
+  };
+  rd.readAsText(f);
+}
+
+function subChanged(s) { return s.text !== s.origText || s.en !== s.origEn; }
+
+function renderSubs() {
+  const list = $('subList');
+  if (!subs.length) {
+    list.innerHTML = '<div class="empty-note">Claude 交付影片時會附「審片字幕_版本.json」，<br>拖進頁面或按「載入字幕檔」。<br>點時間碼跳到那句，直接在字上改錯字。</div>';
+    updateSubBadge();
+    return;
+  }
+  const hasEn = subs.some(s => s.origEn);
+  list.innerHTML = subs.map((s, i) => `
+    <div class="sub-row ${subChanged(s) ? 'edited' : ''}" data-i="${i}">
+      <button class="sub-time" data-i="${i}">${fmt(s.start)}</button>
+      <div class="sub-inputs">
+        <input class="sub-text ${s.text !== s.origText ? 'changed' : ''}" data-i="${i}" data-f="text" value="${escapeAttr(s.text)}">
+        ${s.text !== s.origText ? `<div class="sub-orig">${escapeHtml(s.origText)}</div>` : ''}
+        ${hasEn ? `<input class="sub-en ${s.en !== s.origEn ? 'changed' : ''}" data-i="${i}" data-f="en" value="${escapeAttr(s.en)}">` : ''}
+      </div>
+    </div>`).join('');
+  updateSubBadge();
+}
+
+function escapeAttr(s) { return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+function updateSubBadge() {
+  const n = subs.filter(subChanged).length;
+  const b = $('subBadge');
+  b.style.display = n ? '' : 'none';
+  b.textContent = n + ' 句已改';
+}
+
+function saveSubEdits() {
+  if (!currentFile) return;
+  const edits = subs.map((s, i) => subChanged(s) ? { i, origText: s.origText, text: s.text, en: s.en } : null).filter(Boolean);
+  try { localStorage.setItem('subs_' + currentFile, JSON.stringify(edits)); } catch (err) {}
+}
+
+// 點時間碼跳到那句；改字即記錄
+$('subList').addEventListener('click', e => {
+  const t = e.target.closest('.sub-time');
+  if (t) {
+    video.pause();
+    video.currentTime = subs[+t.dataset.i].start;
+  }
+});
+$('subList').addEventListener('input', e => {
+  const inp = e.target;
+  if (!inp.dataset.f) return;
+  const s = subs[+inp.dataset.i];
+  s[inp.dataset.f] = inp.value;
+  inp.classList.toggle('changed', s[inp.dataset.f] !== (inp.dataset.f === 'text' ? s.origText : s.origEn));
+  inp.closest('.sub-row').classList.toggle('edited', subChanged(s));
+  saveSubEdits();
+  updateSubBadge();
+});
+// 字幕輸入框內 Enter → 跳下一句的輸入框（注音選字 Enter 不算）
+$('subList').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+  const inp = e.target;
+  if (!inp.dataset.f) return;
+  e.preventDefault();
+  const next = $('subList').querySelector(`input[data-i="${+inp.dataset.i + 1}"][data-f="text"]`);
+  if (next) { next.focus(); next.closest('.sub-row').scrollIntoView({ block: 'nearest' }); }
+});
+
+// 播放時高亮目前這句＋自動捲動
+function syncSubHighlight() {
+  if (!subs.length) return;
+  const t = video.currentTime;
+  const idx = subs.findIndex(s => t >= s.start && t < s.end);
+  if (idx === curSubIdx) return;
+  curSubIdx = idx;
+  document.querySelectorAll('.sub-row.current').forEach(r => r.classList.remove('current'));
+  if (idx >= 0) {
+    const row = document.querySelector(`.sub-row[data-i="${idx}"]`);
+    if (row) {
+      row.classList.add('current');
+      if (!video.paused) row.scrollIntoView({ block: 'nearest' });
+    }
+  }
+}
+
+/* 畫記合成：鎖定畫格 + 插圖 + 筆跡 → 一張 jpg（座標映射回影像實際區域） */
+function composeAnnotated() {
+  if (!strokes.length && !inset && !texts.length) return null;
+  const frame = frozenFrame || grabFrameCanvas(720);
+  if (!frame) return null;
+  const outW = frame.width, outH = frame.height;
+  const out = document.createElement('canvas');
+  out.width = outW; out.height = outH;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(frame, 0, 0);
+
+  // 插圖（照擺放位置合成，不含選取框）
+  if (inset && inset.imgEl) {
+    const hN = insetNormH();
+    ctx.drawImage(inset.imgEl,
+      (inset.x - inset.w / 2) * outW, (inset.y - hN / 2) * outH,
+      inset.w * outW, hN * outH);
+  }
+
+  // 畫面文字塊（不含選取框）
+  texts.forEach(t => {
+    const fs = t.size * outW;
+    ctx.font = `700 ${fs}px "PingFang TC", sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, fs * .15);
+    ctx.strokeStyle = 'rgba(0,0,0,.85)';
+    ctx.strokeText(t.str, t.x * outW, t.y * outH);
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.str, t.x * outW, t.y * outH);
+  });
+
+  // 影片在畫布內是 contain 縮放，把畫布座標換算到影像座標
+  const { cw, ch } = drawDims;
+  if (!cw || !ch) return out.toDataURL('image/jpeg', .78);
+  const scale = Math.min(cw / video.videoWidth, ch / video.videoHeight);
+  const dispW = video.videoWidth * scale, dispH = video.videoHeight * scale;
+  const offX = (cw - dispW) / 2, offY = (ch - dispH) / 2;
+  const k = outW / dispW;
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  strokes.forEach(s => {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 4 * k;
+    ctx.beginPath();
+    s.points.forEach((p, i) => {
+      const x = (p.x * cw - offX) * k, y = (p.y * ch - offY) * k;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  });
+  return out.toDataURL('image/jpeg', .78);
+}
+
+/* ---------- 新增留言 ---------- */
+$('btnAdd').addEventListener('click', addComment);
+function addComment() {
+  const text = commentInput.value.trim();
+  if (!currentFile) { toast('請先載入影片'); return; }
+  if (!text && !strokes.length && !inset && !texts.length && !anim) { toast('留言內容不能空白'); return; }
+  const ts = frozenTs !== null ? frozenTs : video.currentTime;
+  const draw = composeAnnotated();
+  comments.push({
+    id: Date.now(),
+    ts,
+    text: text || (anim ? '（動畫需求，見標記）' : inset ? '（照示意圖放插圖）' : texts.length ? '（見畫面文字）' : '（見畫記圖）'),
+    thumb: frozenThumb || grabThumb(),
+    draw,
+    // 插圖：存原始檔＋精確擺放數據（中心 x/y、寬佔比、高佔比）
+    inset: inset ? { src: inset.src, x: inset.x, y: inset.y, w: inset.w, h: insetNormH() } : null,
+    // 畫面文字塊：內容＋位置＋大小
+    texts: texts.length ? texts.map(t => ({ str: t.str, x: t.x, y: t.y, size: t.size, color: t.color })) : null,
+    // 動畫需求類型
+    anim: anim || null
+  });
+  comments.sort((a, b) => a.ts - b.ts);
+  save();
+  renderList();
+  resetForm();
+  toast('已加入 ' + fmt(ts) + ' 的留言' + (draw ? '（含畫記）' : ''));
+}
+
+/* ---------- 清單 render ---------- */
+function renderList() {
+  const list = $('commentList');
+  $('countBadge').textContent = comments.length;
+  if (!comments.length) {
+    list.innerHTML = '<div class="empty-note">還沒有留言。<br>看片 → 暫停 → 打修改指令 → 加入留言</div>';
+    return;
+  }
+  list.innerHTML = comments.map(c => {
+    const img = c.draw || c.thumb;
+    return `
+    <div class="c-item" data-id="${c.id}">
+      ${img ? `<img src="${img}" class="${c.draw ? 'has-draw' : ''}" data-full="${c.draw ? '1' : ''}" alt="">` : ''}
+      <div class="c-body">
+        <span class="c-ts">${fmt(c.ts)}</span>${c.cat ? `<span class="c-cat">${c.cat}</span>` : ''}${c.anim ? `<span class="c-draw-tag">🎬${c.anim}</span>` : ''}${c.inset ? '<span class="c-draw-tag">🖼️插圖</span>' : ''}${c.texts ? '<span class="c-draw-tag">🔤文字</span>' : ''}${!c.inset && !c.texts && c.draw ? '<span class="c-draw-tag">🖊️畫記</span>' : ''}
+        <div class="c-text">${escapeHtml(c.text)}</div>
+      </div>
+      <div class="c-ops">
+        <button data-op="del" title="刪除">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+
+// 點留言跳到該時間點；點 ✕ 刪除；點畫記縮圖開燈箱
+$('commentList').addEventListener('click', e => {
+  const item = e.target.closest('.c-item');
+  if (!item) return;
+  const id = Number(item.dataset.id);
+  if (e.target.dataset.op === 'del') {
+    comments = comments.filter(c => c.id !== id);
+    save();
+    renderList();
+    return;
+  }
+  const c = comments.find(c => c.id === id);
+  if (!c) return;
+  if (e.target.tagName === 'IMG' && c.draw) {
+    $('lightboxImg').src = c.draw;
+    $('lightbox').classList.add('show');
+    return;
+  }
+  video.pause();
+  video.currentTime = c.ts;
+});
+$('lightbox').addEventListener('click', () => $('lightbox').classList.remove('show'));
+
+function save() {
+  if (!currentFile) return;
+  try {
+    localStorage.setItem('review_' + currentFile, JSON.stringify(comments));
+  } catch (err) {
+    toast('⚠️ 留言太多存不下暫存（畫記圖較佔空間），請盡快匯出');
+  }
+}
+
+/* ---------- 匯出 ---------- */
+function buildMd(withImages) {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const now = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let md = `# 審片意見\n\n`;
+  md += `- 審片版本檔名：${currentFile}\n`;
+  md += `- 片長：${fmt(video.duration)}\n`;
+  md += `- 審片時間：${now}\n`;
+  md += `- 留言數：${comments.length}\n\n`;
+  md += `> ⚠️ 以下時間碼皆對應「上述版本檔案」的時間軸，改片前先確認版本一致。\n\n`;
+  md += `## 修改清單\n\n`;
+  const pct = v => Math.round(v * 100);
+  comments.forEach((c, i) => {
+    const drawTag = c.draw ? (withImages ? `（🖊️ 擺放示意 annotation_${i + 1}，見文末）` : `（🖊️ 有附圖，在匯出的 .md 檔裡）`) : '';
+    // 插圖：給精確擺放數據，Claude 直接照數字下 ffmpeg overlay
+    const insetTag = c.inset
+      ? `（🖼️ 插圖擺放：中心 x=${pct(c.inset.x)}%、y=${pct(c.inset.y)}%，寬=畫面寬的 ${pct(c.inset.w)}%${withImages ? `；原始圖檔 inset_${i + 1} 見文末` : ''}）`
+      : '';
+    // 動畫需求：類型＋細節在留言文字
+    const animTag = c.anim ? `（🎬 動畫需求：${c.anim}——內容細節見留言文字、位置見標記）` : '';
+    // 畫面文字塊：內容＋精確位置
+    const textsTag = c.texts
+      ? c.texts.map(t => `（🔤 畫面文字「${t.str}」：左上角 x=${pct(t.x)}%、y=${pct(t.y)}%，字高=畫面寬的 ${(t.size * 100).toFixed(1)}%）`).join('')
+      : '';
+    md += `${i + 1}. **[${fmt(c.ts)}]**${c.cat ? ' ' + c.cat : ''} — ${c.text.replace(/\n/g, ' ')}${animTag}${textsTag}${insetTag}${drawTag}\n`;
+  });
+  // 字幕修正清單（只列有改的句子）
+  const fixes = subs.map((s, i) => ({ s, i })).filter(x => subChanged(x.s));
+  if (fixes.length) {
+    md += `\n## 字幕修正（${fixes.length} 句）\n\n`;
+    md += `> 給 Claude：照「原文 → 改後」逐句修改 SUBS 表（用原文精確比對），時間碼是本版成品時間軸。\n\n`;
+    fixes.forEach(x => {
+      md += `- [${fmt(x.s.start)}] 「${x.s.origText}」→「${x.s.text}」`;
+      if (x.s.en !== x.s.origEn) md += `　英文「${x.s.origEn}」→「${x.s.en}」`;
+      md += `\n`;
+    });
+  }
+  if (withImages && comments.some(c => c.draw || c.inset)) {
+    md += `\n## 附圖\n\n`;
+    md += `> 給 Claude：圖片以 base64 內嵌，請先用 python 把 <img> 的 base64 解成圖檔再看，不要直接把整份檔案讀進 context。annotation_N＝擺放示意（含畫記／插圖合成後的畫面）；inset_N＝插圖原始檔（上片時用這張，照上面的擺放數據 overlay）。\n\n`;
+    comments.forEach((c, i) => {
+      if (c.draw) md += `### annotation_${i + 1}（第 ${i + 1} 條 [${fmt(c.ts)}] 擺放示意）\n<img src="${c.draw}">\n\n`;
+      if (c.inset) md += `### inset_${i + 1}（第 ${i + 1} 條 [${fmt(c.ts)}] 插圖原始檔）\n<img src="${c.inset.src}">\n\n`;
+    });
+  }
+  return md;
+}
+
+$('btnExport').addEventListener('click', () => {
+  if (!currentFile) { toast('請先載入影片'); return; }
+  if (!comments.length && !subs.some(subChanged)) { toast('還沒有留言或字幕修正'); return; }
+  const md = buildMd(true);
+  const base = currentFile.replace(/\.[^.]+$/, '');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+  a.download = `審片意見_${base}.md`;
+  a.click();
+  toast('已匯出！把檔案丟給 Claude 說「照審片意見改」');
+});
+
+$('btnCopy').addEventListener('click', async () => {
+  if (!comments.length && !subs.some(subChanged)) { toast('還沒有留言或字幕修正'); return; }
+  // 複製走純文字版（不含 base64 圖，避免貼上時爆量）
+  await navigator.clipboard.writeText(buildMd(false));
+  toast('已複製（畫記圖請用「匯出」給 Claude）');
+});
+</script>
+</body>
+</html>
