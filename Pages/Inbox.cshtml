@@ -6,29 +6,31 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LINE 客服 - 待審核</title>
+    <title>工作台 - 待審核</title>
     <link rel="stylesheet" href="/site.css" />
     <style>
         .card-head { display: flex; align-items: center; gap: 8px; }
-        .tag-line { background: #06c755; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
-        .cust { font-weight: 600; }
-        .count { margin-left: auto; font-size: 12px; color: #888; }
-        .sub { font-size: 12px; color: #888; margin: 12px 0 8px; }
-        .thread { background: #f7f7f7; border-radius: 8px; padding: 12px; max-height: 400px; overflow-y: auto; }
+        .cust { font-weight: 600; font-size: 17px; }
+        .count { margin-left: auto; font-size: 13px; color: var(--label-2); }
+        .sub { font-size: 13px; color: var(--label-2); margin: 16px 0 8px; }
+        .thread { max-height: 400px; overflow-y: auto; }
         .row { display: flex; flex-direction: column; margin-bottom: 10px; }
         .row.them { align-items: flex-start; }
         .row.me { align-items: flex-end; }
-        .bubble { max-width: 78%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-        .them .bubble { background: #e8e8e8; }
-        .me .bubble { background: #c8f042; }
-        .row.fresh .bubble { background: #fffbe0; border: 1px solid #f0d442; }
-        .time { font-size: 11px; color: #999; margin-top: 3px; }
-        .time .flag { color: #b58a00; }
-        .skipped { text-align: center; color: #aaa; font-size: 12px; margin: 8px 0; }
-        .divider { display: flex; align-items: center; gap: 8px; color: #b58a00; font-size: 12px; margin: 14px 0; }
-        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #ddd; }
-        textarea { width: 100%; margin-top: 14px; padding: 10px; font: inherit; font-size: 14px; height: 80px; border: 1px solid #ddd; border-radius: 8px; resize: vertical; }
+        .bubble { max-width: 78%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .them .bubble { background: var(--surface-2); color: var(--label); }
+        .me .bubble { background: var(--accent); color: var(--accent-ink); }
+        .row.fresh .bubble { background: var(--surface-2); border-left: 3px solid var(--accent); }
+        .time { font-size: 11px; color: var(--label-3); margin-top: 3px; }
+        .time .flag { color: var(--accent); }
+        .skipped { text-align: center; color: var(--label-3); font-size: 12px; margin: 8px 0; }
+        .divider { display: flex; align-items: center; gap: 8px; color: var(--label-3); font-size: 11px; margin: 16px 0; }
+        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--separator); }
+        textarea { width: 100%; margin-top: 16px; padding: 10px; font: inherit; font-size: 15px; height: 80px; background: var(--surface-2); color: var(--label); border: 1px solid transparent; border-radius: 10px; resize: vertical; }
+        textarea:focus { border-color: var(--accent); outline: none; }
+        textarea::placeholder { color: var(--label-3); }
         .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .actions .b-red { margin-left: auto; }
     </style>
 </head>
 <body>
@@ -59,7 +61,6 @@
             {
                 <div class="card">
                     <div class="card-head">
-                        <span class="tag-line">Line</span>
                         <span class="cust">@card.DisplayName</span>
                         <span class="count">@card.NewCount 則訊息</span>
                     </div>
@@ -117,7 +118,7 @@
                             <button type="button" class="b-gray" onclick="this.form.replyText.focus()">手動回覆</button>
                             <button type="submit" class="b-green">送出</button>
                             <button type="submit" class="b-gray" asp-page-handler="Skip" formnovalidate>全部略過</button>
-                            <button type="submit" class="b-red" asp-page-handler="Blacklist" formnovalidate>加入黑名單</button>
+                            <button type="submit" class="b-red" asp-page-handler="Blacklist" formnovalidate onclick="return confirm('確定將此客人加入黑名單?')">加入黑名單</button>
                         </div>
                     </form>
                 </div>

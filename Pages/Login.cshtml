@@ -5,16 +5,18 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>登入</title>
+    <title>工作台 - 登入</title>
     <link rel="stylesheet" href="/site.css" />
     <style>
         .screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
-        .brand { color: #c8f042; font-weight: 700; font-size: 20px; margin-bottom: 16px; }
+        .brand { color: var(--accent); font-weight: 700; font-size: 28px; letter-spacing: -0.02em; margin-bottom: 16px; }
         .card { width: 100%; max-width: 360px; padding: 24px; margin-bottom: 0; }
-        h1 { font-size: 16px; margin: 0 0 16px; }
+        h1 { font-size: 16px; font-weight: 600; margin: 0 0 16px; }
         form { margin: 0; }
-        input { width: 100%; padding: 10px; font: inherit; font-size: 14px; border: 1px solid #ddd; border-radius: 8px; }
-        button { width: 100%; margin-top: 12px; padding: 10px 14px; }
+        input { width: 100%; padding: 10px; font: inherit; font-size: 15px; background: var(--surface-2); color: var(--label); border: 1px solid transparent; border-radius: 10px; }
+        input:focus { border-color: var(--accent); outline: none; }
+        input::placeholder { color: var(--label-3); }
+        button { width: 100%; margin-top: 16px; padding: 10px 16px; }
     </style>
 </head>
 <body>

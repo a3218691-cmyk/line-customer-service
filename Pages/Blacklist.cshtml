@@ -6,12 +6,12 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LINE 客服 - 黑名單</title>
+    <title>工作台 - 黑名單</title>
     <link rel="stylesheet" href="/site.css" />
     <style>
-        .card { padding: 14px 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
+        .card { padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
         .card .name { font-weight: 600; }
-        .card .meta { font-size: 12px; color: #888; }
+        .card .meta { font-size: 13px; color: var(--label-2); }
         .card form { margin: 0 0 0 auto; }
     </style>
 </head>
@@ -21,6 +21,7 @@
         <a asp-page="/Inbox">待審核</a>
         <a class="active" asp-page="/Blacklist">黑名單</a>
         <div class="right">
+            <a asp-page="/Index">← 工作台</a>
             <span>@User.Identity?.Name</span>
             <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
         </div>

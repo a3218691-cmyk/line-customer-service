@@ -10,10 +10,11 @@
     <style>
         .wrap { padding-top: 32px; }
         .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-        .tile { display: block; background: #fff; border-radius: 10px; padding: 24px; text-decoration: none; color: #222; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
-        .tile .name { font-weight: 700; font-size: 18px; }
-        .tile .desc { margin-top: 6px; font-size: 13px; color: #888; }
-        .tile .badge { display: inline-block; margin-top: 12px; background: #c8f042; color: #222; border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
+        .tile { display: block; background: var(--surface); border-radius: 16px; padding: 24px; text-decoration: none; color: var(--label); transition: transform 120ms ease-out, filter 120ms ease-out; }
+        @@media (hover: hover) and (pointer: fine) { .tile:hover { filter: brightness(1.15); } }
+        .tile .name { font-weight: 600; font-size: 17px; }
+        .tile .desc { margin-top: 6px; font-size: 13px; color: var(--label-2); }
+        .tile .badge { display: inline-block; margin-top: 16px; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -26,6 +27,7 @@
     </div>
 
     <div class="wrap">
+        <h1 class="page-title">工作台</h1>
         <div class="tiles">
             <a class="tile" asp-page="/Inbox">
                 <div class="name">LINE 客服</div>
