@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>小關訂閱者專屬審片小幫手</title>
+<title>審片小幫手</title>
 <style>
   /* ===== 品牌色與基本設定 ===== */
   :root {
-    --green: #C3F000;   /* 生機綠 */
-    --orange: #FFAA00;  /* 朝氣橘 */
-    --dark: #1A1A16;    /* 深色底 */
-    --bg: #23231e;
-    --card: #2d2d27;
-    --text: #f2f2ea;
-    --muted: #9a9a8c;
+    --green: #ff9f0a;   /* 主色:統一為工作台暖橘 */
+    --orange: #FFAA00;  /* 次要強調:同暖色系 */
+    --dark: #000;       /* 最深:標題列、輸入框 */
+    --bg: #0d0d0f;      /* 頁面底:近黑 */
+    --card: #1c1c1e;    /* 卡片:同工作台 surface */
+    --text: #f2f2f2;
+    --muted: #9a9aa0;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -64,7 +64,7 @@
   }
   .dropzone:hover, .dropzone.dragover {
     border-color: var(--green);
-    background: rgba(195, 240, 0, .06);
+    background: rgba(255, 159, 10, .08);
   }
   .dropzone .big { font-size: 44px; margin-bottom: 12px; }
   .dropzone p { color: var(--muted); font-size: 14px; line-height: 1.8; }
@@ -106,7 +106,7 @@
     border-radius: 14px;
     outline: none;
   }
-  /* 進度條（2026-07-20 小關要求：可拖曳跳秒，不用慢慢按） */
+  /* 進度條（2026-07-20：可拖曳跳秒，不用慢慢按） */
   .seek-bar {
     padding: 12px 2px 4px;
     cursor: pointer;
@@ -443,7 +443,7 @@
     padding: 5px 6px;
     border-radius: 8px;
   }
-  .sub-row.current { background: rgba(195, 240, 0, .1); }
+  .sub-row.current { background: rgba(255, 159, 10, .12); }
   .sub-time {
     flex-shrink: 0;
     font-size: 12px;
@@ -543,7 +543,7 @@
 <body>
 
 <header>
-  <h1>小關訂閱者專屬審片小幫手</h1>
+  <h1>審片小幫手</h1>
   <span class="ver-tag">留言自帶時間碼 → 匯出給 Claude 改片</span>
 </header>
 
@@ -1026,19 +1026,19 @@ function redraw() {
     const b = insetBounds();
     ctx.drawImage(inset.imgEl, b.l * cw, b.t * ch, b.w * cw, b.h * ch);
     ctx.save();
-    ctx.strokeStyle = '#C3F000';
+    ctx.strokeStyle = '#ff9f0a';
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 4]);
     ctx.strokeRect(b.l * cw, b.t * ch, b.w * cw, b.h * ch);
     ctx.setLineDash([]);
-    ctx.fillStyle = '#C3F000';
+    ctx.fillStyle = '#ff9f0a';
     ctx.fillRect((b.l + b.w) * cw - 7, (b.t + b.h) * ch - 7, 14, 14);   // 縮放把手
     const label = `寬 ${Math.round(inset.w * 100)}%`;
     ctx.font = '700 12px sans-serif';
     const tw = ctx.measureText(label).width;
     ctx.fillStyle = 'rgba(26,26,22,.85)';
     ctx.fillRect(b.l * cw, b.t * ch - 20, tw + 12, 18);
-    ctx.fillStyle = '#C3F000';
+    ctx.fillStyle = '#ff9f0a';
     ctx.fillText(label, b.l * cw + 6, b.t * ch - 6);
     ctx.restore();
   }
@@ -1057,7 +1057,7 @@ function redraw() {
     if (t.id === selText) {
       const b = textBBox(t);
       ctx.save();
-      ctx.strokeStyle = '#C3F000';
+      ctx.strokeStyle = '#ff9f0a';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(b.l * cw - 4, b.t * ch - 4, b.w * cw + 8, b.h * ch + 8);
