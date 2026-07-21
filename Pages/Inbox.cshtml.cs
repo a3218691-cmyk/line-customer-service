@@ -348,9 +348,13 @@ public class InboxModel : PageModel
             LIMIT 10
             """, new { Cid = target.ConversationId, Ts = target.LineTimestamp });
 
+        // 知識庫全表撈,併進 system prompt(不加 LIMIT、不篩選)
+        var faqs = (await conn.QueryAsync<FaqRow>(
+            "SELECT Question, Answer FROM KnowledgeBase ORDER BY CreatedAt")).AsList();
+
         var messages = new List<object>
         {
-            new { role = "system", content = SystemPrompt },
+            new { role = "system", content = BuildSystemPrompt(faqs) },
         };
         foreach (var row in history.Reverse())
             messages.Add(new { role = row.Role, content = row.Text });
@@ -371,9 +375,42 @@ public class InboxModel : PageModel
 
     private record HistoryRow(string Role, string Text);
 
-    private const string SystemPrompt =
-        "你是繁體中文客服人員。語氣禮貌簡潔,回覆控制在 200 字以內。" +
-        "不要編造訂單、金額、時程等資訊;資訊不足時主動向客戶詢問。只輸出回覆內容本身。";
+    private record FaqRow(string Question, string Answer);
+
+    // 角色設定(基底)。硬約束與知識庫由 BuildSystemPrompt 動態接上。
+    private const string SystemPromptBase =
+        "你是繁體中文客服人員。語氣禮貌簡潔,回覆控制在 200 字以內。只輸出回覆內容本身。";
+
+    /// <summary>組最終 system content:角色 + 硬約束 +(有資料才加)知識庫段落。</summary>
+    private static string BuildSystemPrompt(IReadOnlyList<FaqRow> faqs)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(SystemPromptBase);
+        sb.AppendLine();
+
+        // 硬約束:給人審用的訊號,沒料的題目讓草稿空著/說不確定,不可省略
+        sb.AppendLine("【回答規則】");
+        sb.AppendLine("- 你只能根據下方「店家資料」回答客戶問題。");
+        sb.AppendLine("- 店家資料裡沒有的資訊(價格、庫存、出貨/到貨日期、訂單狀態、優惠等)一律不可自行編造、不可自行承諾。");
+        sb.AppendLine("- 知識庫裡沒有的商品或服務,一律視為店家沒有販售。客人問到知識庫沒有的品項時,不可假裝有賣、不可編造品項/規格/價格,要老實回覆「這個我們目前沒有販售」或「我幫您確認後再回覆」。不可為了服務熱情而無中生有。");
+        sb.AppendLine("- 查不到答案時不要猜,用話術:「不確定的部分,我幫您確認後再回覆您」(或轉專人)。");
+
+        if (faqs.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("以下是店家提供的問答資料,請據此回答:");
+            sb.AppendLine();
+            for (var i = 0; i < faqs.Count; i++)
+            {
+                sb.AppendLine($"Q: {faqs[i].Question}");
+                sb.AppendLine($"A: {faqs[i].Answer}");
+                if (i < faqs.Count - 1)
+                    sb.AppendLine();
+            }
+        }
+
+        return sb.ToString().TrimEnd();
+    }
 
     /// <summary>成功回 (草稿, null),失敗回 (null, 錯誤訊息)。</summary>
     private async Task<(string? Draft, string? Error)> DraftAsync(IReadOnlyList<object> messages)
