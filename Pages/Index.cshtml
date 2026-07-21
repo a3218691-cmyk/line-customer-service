@@ -22,7 +22,7 @@
 </head>
 <body>
     <div class="nav">
-        <span class="brand">工作台</span>
+        <a href="/" class="brand">工作台</a>
         <div class="right">
             <span>@User.Identity?.Name</span>
             <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
@@ -30,8 +30,6 @@
     </div>
 
     <div class="wrap">
-        <h1 class="page-title">工作台</h1>
-
         <div class="cat">
             <div class="cat-label">客服</div>
             <div class="tiles">

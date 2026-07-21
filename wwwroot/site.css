@@ -32,7 +32,7 @@ body {
 @media (prefers-reduced-transparency: reduce) {
   .nav { background: #faf6ee; backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
-.nav .brand { color: var(--brand); font-weight: 700; font-size: 16px; }
+.nav .brand { color: var(--brand); font-weight: 700; font-size: 16px; padding: 0; }
 .nav a { color: var(--label-2); text-decoration: none; font-size: 14px; padding: 6px 14px; border-radius: 16px; }
 .nav a.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .nav .right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--label-2); }
