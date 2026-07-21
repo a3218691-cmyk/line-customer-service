@@ -7,13 +7,15 @@
 <style>
   /* ===== 品牌色與基本設定 ===== */
   :root {
-    --green: #ff9f0a;   /* 主色:統一為工作台暖橘 */
-    --orange: #FFAA00;  /* 次要強調:同暖色系 */
-    --dark: #000;       /* 最深:標題列、輸入框 */
-    --bg: #0d0d0f;      /* 頁面底:近黑 */
-    --card: #1c1c1e;    /* 卡片:同工作台 surface */
-    --text: #f2f2f2;
-    --muted: #9a9aa0;
+    --green: #ff9f0a;         /* accent:底色/邊框/強調線用的暖橘 */
+    --orange: #ff9f0a;        /* 同 accent(原次強調亮橘,淺底統一) */
+    --brand: #c76a00;         /* 暖橘「當文字」時的深一階,淺底才讀得清 */
+    --accent-ink: #3a2500;    /* 橘底上的深字 */
+    --dark: #ece3d1;          /* 凹槽:輸入框/小凸起,比卡片稍深的米 */
+    --bg: #f2ece0;            /* 頁面底:奶油米 */
+    --card: #fffdf7;          /* 卡片:暖白 */
+    --text: #2b2620;          /* 主文字:深棕 */
+    --muted: rgba(60,50,35,.55);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -46,7 +48,7 @@
     padding: 6px 12px;
     border-radius: 8px;
     background: var(--card);
-    color: var(--green);
+    color: var(--brand);
     font-size: 14px;
     font-weight: 600;
     text-decoration: none;
@@ -82,7 +84,7 @@
   }
   .dropzone .big { font-size: 44px; margin-bottom: 12px; }
   .dropzone p { color: var(--muted); font-size: 14px; line-height: 1.8; }
-  .dropzone strong { color: var(--green); font-size: 16px; }
+  .dropzone strong { color: var(--brand); font-size: 16px; }
 
   .video-box { display: none; }
   .video-box.active { display: block; }
@@ -95,7 +97,7 @@
     font-size: 13px;
     flex-wrap: wrap;
   }
-  .file-bar .fname { color: var(--orange); font-weight: 700; word-break: break-all; }
+  .file-bar .fname { color: var(--brand); font-weight: 700; word-break: break-all; }
   .file-bar .warn { color: var(--muted); font-size: 12px; }
   .file-bar button {
     margin-left: auto;
@@ -103,7 +105,7 @@
     color: var(--muted); border-radius: 8px;
     padding: 4px 10px; font-size: 12px; cursor: pointer;
   }
-  .file-bar button:hover { border-color: var(--orange); color: var(--orange); }
+  .file-bar button:hover { border-color: var(--orange); color: var(--brand); }
 
   /* 影片外框（畫記 canvas 疊在上面）
      video-wrap 縮到跟影片內容一樣大＝沒有黑邊，
@@ -130,7 +132,7 @@
   .seek-track {
     position: relative;
     height: 8px;
-    background: #3a3a32;
+    background: #ddd4c2;
     border-radius: 4px;
   }
   .seek-fill {
@@ -149,7 +151,7 @@
     border: 3px solid var(--dark);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    box-shadow: 0 0 6px rgba(0,0,0,.6);
+    box-shadow: 0 0 6px rgba(0,0,0,.25);
     pointer-events: none;
   }
   .seek-bar:hover .seek-thumb, .seek-bar.dragging .seek-thumb {
@@ -190,17 +192,17 @@
     cursor: pointer;
     flex-shrink: 0;
   }
-  .swatch.sel { border-color: #fff; transform: scale(1.15); }
+  .swatch.sel { border-color: #2b2620; transform: scale(1.15); }
   .draw-bar button.op {
     background: var(--card);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     color: var(--text);
     border-radius: 8px;
     padding: 5px 12px;
     font-size: 13px;
     cursor: pointer;
   }
-  .draw-bar button.op:hover { border-color: var(--green); color: var(--green); }
+  .draw-bar button.op:hover { border-color: var(--green); color: var(--brand); }
 
   /* 畫面文字塊的輸入框（浮在影片上） */
   #textInput {
@@ -222,18 +224,18 @@
   /* 動畫需求選單 */
   .mini-btn {
     background: var(--card);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     color: var(--text);
     border-radius: 8px;
     padding: 5px 10px;
     font-size: 13px;
     cursor: pointer;
   }
-  .mini-btn:hover, .mini-btn.on { border-color: var(--orange); color: var(--orange); }
+  .mini-btn:hover, .mini-btn.on { border-color: var(--orange); color: var(--brand); }
   .anim-panel {
     display: none;
     background: var(--dark);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     border-radius: 10px;
     padding: 10px;
     margin-bottom: 10px;
@@ -244,7 +246,7 @@
     font-size: 13px;
     padding: 5px 10px;
     border-radius: 20px;
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     color: var(--muted);
     cursor: pointer;
     user-select: none;
@@ -252,7 +254,7 @@
   .anim-chip.sel {
     background: var(--orange);
     border-color: var(--orange);
-    color: var(--dark);
+    color: var(--accent-ink);
     font-weight: 700;
   }
   .anim-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
@@ -263,7 +265,7 @@
   }
   .ctrl-bar button {
     background: var(--card);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     color: var(--text);
     border-radius: 10px;
     padding: 8px 14px;
@@ -271,18 +273,18 @@
     cursor: pointer;
     transition: all .15s;
   }
-  .ctrl-bar button:hover { border-color: var(--green); color: var(--green); }
+  .ctrl-bar button:hover { border-color: var(--green); color: var(--brand); }
   .ctrl-bar #btnDraw.on {
     background: var(--orange);
     border-color: var(--orange);
-    color: var(--dark);
+    color: var(--accent-ink);
     font-weight: 700;
   }
   .ctrl-bar .time-disp {
     font-variant-numeric: tabular-nums;
     font-size: 15px;
     font-weight: 700;
-    color: var(--green);
+    color: var(--brand);
     background: var(--dark);
     border-radius: 10px;
     padding: 8px 14px;
@@ -296,11 +298,11 @@
   }
   .hotkey-hint kbd {
     background: var(--dark);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     border-radius: 5px;
     padding: 1px 6px;
     font-size: 11px;
-    color: var(--orange);
+    color: var(--brand);
   }
 
   /* ===== 右側：留言面板 ===== */
@@ -318,23 +320,23 @@
     padding: 5px 12px;
     font-size: 14px;
     font-weight: 700;
-    color: var(--green);
+    color: var(--brand);
     font-variant-numeric: tabular-nums;
     margin-bottom: 10px;
   }
-  .comment-form .ts-chip.frozen { color: var(--orange); }
+  .comment-form .ts-chip.frozen { color: var(--brand); }
   .comment-form .ts-chip .lock { font-size: 12px; }
   .draw-pending {
     display: none;
     font-size: 12px;
-    color: var(--orange);
+    color: var(--brand);
     margin: 0 0 8px 2px;
   }
   .draw-pending.show { display: block; }
   .comment-form textarea {
     width: 100%;
     background: var(--dark);
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     border-radius: 10px;
     color: var(--text);
     font-size: 15px;
@@ -349,7 +351,7 @@
   .btn-add {
     flex: 1;
     background: var(--green);
-    color: var(--dark);
+    color: var(--accent-ink);
     border: none;
     border-radius: 10px;
     padding: 10px;
@@ -360,7 +362,7 @@
   .btn-add:hover { filter: brightness(1.1); }
   .btn-cancel {
     background: none;
-    border: 1px solid #44443a;
+    border: 1px solid rgba(60,50,35,.18);
     color: var(--muted);
     border-radius: 10px;
     padding: 10px 14px;
@@ -385,7 +387,7 @@
   .list-head h2 { font-size: 15px; }
   .list-head .count {
     background: var(--orange);
-    color: var(--dark);
+    color: var(--accent-ink);
     border-radius: 12px;
     font-size: 12px;
     font-weight: 700;
@@ -426,11 +428,11 @@
   .c-item .c-ts {
     font-size: 13px;
     font-weight: 700;
-    color: var(--green);
+    color: var(--brand);
     font-variant-numeric: tabular-nums;
   }
-  .c-item .c-cat { font-size: 12px; color: var(--orange); margin-left: 6px; }
-  .c-item .c-draw-tag { font-size: 11px; color: var(--orange); margin-left: 6px; }
+  .c-item .c-cat { font-size: 12px; color: var(--brand); margin-left: 6px; }
+  .c-item .c-draw-tag { font-size: 11px; color: var(--brand); margin-left: 6px; }
   .c-item .c-text { font-size: 14px; line-height: 1.6; margin-top: 4px; word-break: break-word; white-space: pre-wrap; }
   .c-item .c-ops { display: flex; flex-direction: column; gap: 6px; }
   .c-item .c-ops button {
@@ -440,7 +442,7 @@
     cursor: pointer;
     padding: 2px;
   }
-  .c-item .c-ops button:hover { color: var(--orange); }
+  .c-item .c-ops button:hover { color: var(--brand); }
 
   /* ===== 字幕校對 ===== */
   .sub-list {
@@ -462,7 +464,7 @@
     flex-shrink: 0;
     font-size: 12px;
     font-weight: 700;
-    color: var(--green);
+    color: var(--brand);
     font-variant-numeric: tabular-nums;
     background: var(--dark);
     border-radius: 6px;
@@ -470,12 +472,12 @@
     cursor: pointer;
     border: none;
   }
-  .sub-time:hover { color: var(--orange); }
+  .sub-time:hover { color: var(--brand); }
   .sub-inputs { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
   .sub-inputs input {
     width: 100%;
     background: var(--dark);
-    border: 1px solid #3a3a32;
+    border: 1px solid #ddd4c2;
     border-radius: 6px;
     color: var(--text);
     font-size: 14px;
@@ -485,7 +487,7 @@
   }
   .sub-inputs input.sub-en { font-size: 12px; color: var(--muted); }
   .sub-inputs input:focus { border-color: var(--green); }
-  .sub-row.edited input.changed { border-color: var(--orange); color: var(--orange); }
+  .sub-row.edited input.changed { border-color: var(--orange); color: var(--brand); }
   .sub-orig {
     font-size: 11px;
     color: var(--muted);
@@ -498,7 +500,7 @@
   .btn-export {
     flex: 1;
     background: var(--orange);
-    color: var(--dark);
+    color: var(--accent-ink);
     border: none;
     border-radius: 12px;
     padding: 13px;
@@ -510,7 +512,7 @@
   .btn-copy {
     background: var(--card);
     border: 1px solid var(--orange);
-    color: var(--orange);
+    color: var(--brand);
     border-radius: 12px;
     padding: 13px 16px;
     font-size: 14px;
@@ -541,7 +543,7 @@
     bottom: 26px; left: 50%;
     transform: translateX(-50%);
     background: var(--green);
-    color: var(--dark);
+    color: var(--accent-ink);
     font-weight: 700;
     font-size: 14px;
     padding: 10px 22px;
