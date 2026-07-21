@@ -1,12 +1,12 @@
 @page
 @using LineBotLogger.Pages
-@model LineBotLogger.Pages.InboxModel
+@model LineBotLogger.Pages.ProcessedModel
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>工作台 - 待審核</title>
+    <title>工作台 - 已處理</title>
     <link rel="stylesheet" href="/site.css" />
     <style>
         .card-head { display: flex; align-items: center; gap: 8px; }
@@ -20,25 +20,16 @@
         .bubble { max-width: 78%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
         .them .bubble { background: var(--surface-2); color: var(--label); }
         .me .bubble { background: var(--accent); color: var(--accent-ink); }
-        .row.fresh .bubble { background: var(--surface-2); border-left: 3px solid var(--accent); }
         .time { font-size: 11px; color: var(--label-3); margin-top: 3px; }
-        .time .flag { color: var(--accent); }
         .skipped { text-align: center; color: var(--label-3); font-size: 12px; margin: 8px 0; }
-        .divider { display: flex; align-items: center; gap: 8px; color: var(--label-3); font-size: 11px; margin: 16px 0; }
-        .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--separator); }
-        textarea { width: 100%; margin-top: 16px; padding: 10px; font: inherit; font-size: 15px; height: 80px; background: var(--surface-2); color: var(--label); border: 1px solid transparent; border-radius: 10px; resize: vertical; }
-        textarea:focus { border-color: var(--accent); outline: none; }
-        textarea::placeholder { color: var(--label-3); }
-        .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-        .actions .b-red { margin-left: auto; }
     </style>
 </head>
 <body>
     <div class="nav">
         <a href="/" class="brand">工作台</a>
-        <a class="active" asp-page="/Inbox">待審核</a>
+        <a asp-page="/Inbox">待審核</a>
         <a asp-page="/Supervisor">主管處理區</a>
-        <a asp-page="/Processed">已處理</a>
+        <a class="active" asp-page="/Processed">已處理</a>
         <a asp-page="/Blacklist">黑名單</a>
         <a asp-page="/KnowledgeBase">知識庫</a>
         <div class="right">
@@ -49,14 +40,9 @@
     </div>
 
     <div class="wrap">
-        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-        {
-            <p class="error">@Model.ErrorMessage</p>
-        }
-
         @if (Model.Cards.Count == 0)
         {
-            <p class="empty">目前沒有待回訊息</p>
+            <p class="empty">目前沒有已處理的客人</p>
         }
         else
         {
@@ -65,17 +51,15 @@
                 <div class="card">
                     <div class="card-head">
                         <span class="cust">@card.DisplayName</span>
-                        <span class="count">@card.NewCount 則訊息</span>
+                        <span class="count">@card.History.Count 則往來</span>
                     </div>
 
-                    <div class="sub">對話紀錄(歷史 @card.History.Count 筆 + 新訊息)</div>
                     <div class="thread">
                         @for (var i = 0; i < card.History.Count; i++)
                         {
                             var entry = card.History[i];
                             if (entry.Role == "user" && entry.Status == "skipped")
                             {
-                                // 連續略過的合併成一行,不然會把有內容的上下文洗掉
                                 var n = 1;
                                 while (i + n < card.History.Count
                                        && card.History[i + n].Role == "user"
@@ -101,29 +85,7 @@
                                 </div>
                             }
                         }
-
-                        <div class="divider">▾ 以下為新訊息</div>
-
-                        @foreach (var entry in card.NewMessages)
-                        {
-                            <div class="row them fresh">
-                                <div class="bubble">@InboxModel.BubbleText(entry)</div>
-                                <div class="time">@InboxModel.ToTaipeiShort(entry.DisplayTs) <span class="flag">待回覆</span></div>
-                            </div>
-                        }
                     </div>
-
-                    <form method="post">
-                        <input type="hidden" name="conversationId" value="@card.ConversationId" />
-                        <textarea name="replyText" required placeholder="輸入回覆內容">@(Model.DraftForId == card.ConversationId ? Model.DraftText : null)</textarea>
-                        <div class="actions">
-                            <button type="submit" class="b-gray" asp-page-handler="Draft" formnovalidate>AI 生成草稿</button>
-                            <button type="submit" class="b-green">送出</button>
-                            <button type="submit" class="b-gray" asp-page-handler="Skip" formnovalidate>全部略過</button>
-                            <button type="submit" class="b-gray" asp-page-handler="Escalate" formnovalidate>轉交主管</button>
-                            <button type="submit" class="b-red" asp-page-handler="Blacklist" formnovalidate onclick="return confirm('確定將此客人加入黑名單?')">加入黑名單</button>
-                        </div>
-                    </form>
                 </div>
             }
         }

@@ -60,14 +60,8 @@ public class InboxModel : PageModel
     {
         await using var conn = new NpgsqlConnection(_connStr);
 
-        // 有待回訊息的對話,依該對話最新待回時間由舊到新(最舊在最上,先回等最久的)
-        var heads = (await conn.QueryAsync<ConversationHead>("""
-            SELECT ConversationId, COUNT(*)::int AS NewCount, MAX(LineTimestamp) AS LastTs
-            FROM Messages
-            WHERE SourceType = 'user' AND Status = 'new'
-            GROUP BY ConversationId
-            ORDER BY LastTs ASC
-            """)).AsList();
+        // 有待處理訊息的對話,依該對話最新時間排序(各看板的口徑在 LoadHeadsAsync)
+        var heads = await LoadHeadsAsync(conn);
 
         if (heads.Count == 0)
             return;
@@ -84,7 +78,7 @@ public class InboxModel : PageModel
                     SELECT m.LineTimestamp AS Ts, m.LineTimestamp AS DisplayTs, 0 AS Seq, 'user' AS Role,
                            m.MessageText AS Text, m.MessageType AS MessageType, m.Status AS Status
                     FROM Messages m
-                    WHERE m.ConversationId = @Cid AND m.SourceType = 'user' AND m.Status <> 'new'
+                    WHERE m.ConversationId = @Cid AND m.SourceType = 'user' AND m.Status <> @Src
                     UNION ALL
                     SELECT m.LineTimestamp AS Ts, r.SentAt AS DisplayTs, 1 AS Seq, 'assistant' AS Role,
                            r.FinalText AS Text, 'text' AS MessageType, 'replied' AS Status
@@ -94,15 +88,9 @@ public class InboxModel : PageModel
                 ) h
                 ORDER BY Ts DESC, Seq DESC
                 LIMIT 20
-                """, new { Cid = head.ConversationId })).Reverse().ToList();
+                """, new { Cid = head.ConversationId, Src = SourceStatus })).Reverse().ToList();
 
-            var fresh = (await conn.QueryAsync<TimelineEntry>("""
-                SELECT 'user' AS Role, MessageText AS Text, LineTimestamp AS Ts,
-                       LineTimestamp AS DisplayTs, MessageType, Status
-                FROM Messages
-                WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
-                ORDER BY LineTimestamp
-                """, new { Cid = head.ConversationId })).AsList();
+            var fresh = await LoadFreshAsync(conn, head.ConversationId);
 
             names.TryGetValue(head.ConversationId, out var name);
             cards.Add(new ConversationCard(
@@ -114,7 +102,30 @@ public class InboxModel : PageModel
         Cards = cards;
     }
 
-    private record ConversationHead(string ConversationId, int NewCount, DateTime LastTs);
+    /// <summary>這個看板處理的「待處理」狀態:待審核=new,主管處理區=escalated。</summary>
+    protected virtual string SourceStatus => "new";
+
+    /// <summary>撈這個看板要顯示的對話清單(各看板篩選條件不同)。</summary>
+    protected virtual async Task<List<ConversationHead>> LoadHeadsAsync(NpgsqlConnection conn) =>
+        (await conn.QueryAsync<ConversationHead>("""
+            SELECT ConversationId, COUNT(*)::int AS NewCount, MAX(LineTimestamp) AS LastTs
+            FROM Messages
+            WHERE SourceType = 'user' AND Status = @Src
+            GROUP BY ConversationId
+            ORDER BY LastTs ASC
+            """, new { Src = SourceStatus })).AsList();
+
+    /// <summary>撈這個對話的「待處理」訊息(卡片下方新訊息區);已處理頁沒有這一區。</summary>
+    protected virtual async Task<List<TimelineEntry>> LoadFreshAsync(NpgsqlConnection conn, string cid) =>
+        (await conn.QueryAsync<TimelineEntry>("""
+            SELECT 'user' AS Role, MessageText AS Text, LineTimestamp AS Ts,
+                   LineTimestamp AS DisplayTs, MessageType, Status
+            FROM Messages
+            WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = @Src
+            ORDER BY LineTimestamp
+            """, new { Cid = cid, Src = SourceStatus })).AsList();
+
+    protected record ConversationHead(string ConversationId, int NewCount, DateTime LastTs);
 
     private record LineUserRow(string ConversationId, string DisplayName);
 
@@ -199,7 +210,7 @@ public class InboxModel : PageModel
 
         await using var conn = new NpgsqlConnection(_connStr);
         // Replies 掛在該對話最新的那則待回訊息上
-        var anchorId = await conn.ExecuteScalarAsync<long?>(LatestNewIdSql, new { Cid = conversationId });
+        var anchorId = await conn.ExecuteScalarAsync<long?>(LatestNewIdSql, new { Cid = conversationId, Src = SourceStatus });
         if (anchorId is null)
         {
             ErrorMessage = "找不到待回訊息,可能已被其他人處理";
@@ -222,7 +233,7 @@ public class InboxModel : PageModel
             await conn.ExecuteAsync(
                 "INSERT INTO Replies (MessageId, FinalText) VALUES (@MessageId, @FinalText)",
                 new { MessageId = anchorId.Value, FinalText = replyText }, tx);
-            await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "replied" }, tx);
+            await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "replied", Src = SourceStatus }, tx);
             await tx.CommitAsync();
         }
         catch (Exception ex)
@@ -240,7 +251,7 @@ public class InboxModel : PageModel
     public async Task<IActionResult> OnPostSkipAsync(string conversationId)
     {
         await using var conn = new NpgsqlConnection(_connStr);
-        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped" });
+        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped", Src = SourceStatus });
         _logger.LogInformation("Conversation {ConversationId} skipped", conversationId);
         return RedirectToPage();
     }
@@ -255,23 +266,35 @@ public class InboxModel : PageModel
             SELECT @Cid, (SELECT DisplayName FROM LineUsers WHERE ConversationId = @Cid)
             ON CONFLICT (ConversationId) DO NOTHING
             """, new { Cid = conversationId }, tx);
-        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped" }, tx);
+        await conn.ExecuteAsync(MarkNewSql, new { Cid = conversationId, Status = "skipped", Src = SourceStatus }, tx);
         await tx.CommitAsync();
 
         _logger.LogInformation("Conversation {ConversationId} blacklisted", conversationId);
         return RedirectToPage();
     }
 
+    /// <summary>轉交主管:把這個對話的待回訊息改成 escalated,丟進主管處理區。只有待審核頁提供這顆按鈕。</summary>
+    public async Task<IActionResult> OnPostEscalateAsync(string conversationId)
+    {
+        await using var conn = new NpgsqlConnection(_connStr);
+        await conn.ExecuteAsync("""
+            UPDATE Messages SET Status = 'escalated'
+            WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+            """, new { Cid = conversationId });
+        _logger.LogInformation("Conversation {ConversationId} escalated", conversationId);
+        return RedirectToPage();
+    }
+
     private const string LatestNewIdSql = """
         SELECT Id FROM Messages
-        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = @Src
         ORDER BY LineTimestamp DESC, Id DESC
         LIMIT 1
         """;
 
     private const string MarkNewSql = """
         UPDATE Messages SET Status = @Status
-        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+        WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = @Src
         """;
 
     /// <summary>成功回 null,失敗回要顯示的錯誤訊息。</summary>
@@ -321,10 +344,10 @@ public class InboxModel : PageModel
         await using var conn = new NpgsqlConnection(_connStr);
         var target = await conn.QuerySingleOrDefaultAsync<DraftTarget>("""
             SELECT ConversationId, LineTimestamp FROM Messages
-            WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = 'new'
+            WHERE ConversationId = @Cid AND SourceType = 'user' AND Status = @Src
             ORDER BY LineTimestamp DESC, Id DESC
             LIMIT 1
-            """, new { Cid = conversationId });
+            """, new { Cid = conversationId, Src = SourceStatus });
         if (target is null)
         {
             ErrorMessage = "找不到待回訊息,可能已被其他人處理";
