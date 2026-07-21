@@ -1,0 +1,85 @@
+@page
+@using LineBotLogger.Pages
+@model LineBotLogger.Pages.KnowledgeBaseModel
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>工作台 - 知識庫</title>
+    <link rel="stylesheet" href="/site.css" />
+    <style>
+        .card .meta { font-size: 13px; color: var(--label-2); margin: 8px 0; }
+        .card label { display: block; font-size: 13px; color: var(--label-2); margin: 12px 0 6px; }
+        input, textarea { width: 100%; padding: 10px; font: inherit; font-size: 15px; background: var(--surface-2); color: var(--label); border: 1px solid transparent; border-radius: 10px; }
+        input:focus, textarea:focus { border-color: var(--accent); outline: none; }
+        input::placeholder, textarea::placeholder { color: var(--label-3); }
+        textarea { height: 80px; resize: vertical; }
+        .btns { display: flex; gap: 8px; margin-top: 12px; }
+        .btns form { margin: 0; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <span class="brand">工作台</span>
+        <a asp-page="/Inbox">待審核</a>
+        <a asp-page="/Blacklist">黑名單</a>
+        <a class="active" asp-page="/KnowledgeBase">知識庫</a>
+        <div class="right">
+            <a asp-page="/Index">← 工作台</a>
+            <span>@User.Identity?.Name</span>
+            <form method="post" asp-page="/Logout"><button type="submit">登出</button></form>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <h1 class="page-title">知識庫</h1>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <p class="error">@Model.ErrorMessage</p>
+        }
+
+        <div class="card">
+            <form method="post" asp-page-handler="Add">
+                <label>問題</label>
+                <input name="question" placeholder="輸入問題" />
+                <label>答案</label>
+                <textarea name="answer" placeholder="輸入答案"></textarea>
+                <div class="btns">
+                    <button type="submit" class="b-green">新增</button>
+                </div>
+            </form>
+        </div>
+
+        @if (Model.Items.Count == 0)
+        {
+            <p class="empty">知識庫是空的</p>
+        }
+        else
+        {
+            @foreach (var item in Model.Items)
+            {
+                <div class="card">
+                    @* update 表單:欄位預填現值;儲存鈕用 form= 屬性引用,好與刪除鈕並排 *@
+                    <form method="post" asp-page-handler="Update" id="upd-@item.Id">
+                        <input type="hidden" name="id" value="@item.Id" />
+                        <label>問題</label>
+                        <input name="question" value="@item.Question" />
+                        <label>答案</label>
+                        <textarea name="answer">@item.Answer</textarea>
+                    </form>
+                    <div class="meta">建立於 @InboxModel.ToTaipei(item.CreatedAt)</div>
+                    <div class="btns">
+                        <button type="submit" form="upd-@item.Id" class="b-green">儲存</button>
+                        <form method="post" asp-page-handler="Remove">
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="b-gray">刪除</button>
+                        </form>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</body>
+</html>

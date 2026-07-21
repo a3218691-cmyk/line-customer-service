@@ -13,6 +13,7 @@ builder.Services.AddRazorPages(o =>
     o.Conventions.AuthorizePage("/Index");
     o.Conventions.AuthorizePage("/Inbox");
     o.Conventions.AuthorizePage("/Blacklist");
+    o.Conventions.AuthorizePage("/KnowledgeBase");
 });
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(o =>
@@ -223,6 +224,13 @@ const string SchemaSql = """
         ConversationId TEXT PRIMARY KEY,
         DisplayName    TEXT        NULL,
         CreatedAt      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
+    CREATE TABLE IF NOT EXISTS KnowledgeBase (
+        Id        BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        Question  TEXT        NOT NULL,
+        Answer    TEXT        NOT NULL,
+        CreatedAt TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     """;
 
