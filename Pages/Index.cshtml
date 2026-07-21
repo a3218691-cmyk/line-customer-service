@@ -15,6 +15,9 @@
         .tile .name { font-weight: 600; font-size: 17px; }
         .tile .desc { margin-top: 6px; font-size: 13px; color: var(--label-2); }
         .tile .badge { display: inline-block; margin-top: 16px; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; }
+        .cat { margin-top: 28px; }
+        .cat:first-of-type { margin-top: 8px; }
+        .cat-label { font-size: 13px; font-weight: 600; color: var(--label-2); margin-bottom: 10px; padding-left: 4px; }
     </style>
 </head>
 <body>
@@ -28,19 +31,29 @@
 
     <div class="wrap">
         <h1 class="page-title">工作台</h1>
-        <div class="tiles">
-            <a class="tile" asp-page="/Inbox">
-                <div class="name">LINE 客服</div>
-                <div class="desc">待審核訊息與回覆</div>
-                @if (Model.PendingConversations > 0)
-                {
-                    <div class="badge">@Model.PendingConversations 位待回</div>
-                }
-            </a>
-            <a class="tile" href="/review">
-                <div class="name">審片小幫手</div>
-                <div class="desc">影片審片、畫記、匯出改片意見</div>
-            </a>
+
+        <div class="cat">
+            <div class="cat-label">客服</div>
+            <div class="tiles">
+                <a class="tile" asp-page="/Inbox">
+                    <div class="name">LINE 客服</div>
+                    <div class="desc">待審核訊息與回覆</div>
+                    @if (Model.PendingConversations > 0)
+                    {
+                        <div class="badge">@Model.PendingConversations 位待回</div>
+                    }
+                </a>
+            </div>
+        </div>
+
+        <div class="cat">
+            <div class="cat-label">影音</div>
+            <div class="tiles">
+                <a class="tile" href="/review">
+                    <div class="name">審片小幫手</div>
+                    <div class="desc">影片審片、畫記、匯出改片意見</div>
+                </a>
+            </div>
         </div>
     </div>
 </body>
