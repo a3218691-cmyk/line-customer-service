@@ -354,7 +354,7 @@ public class InboxModel : PageModel
             return RedirectToPage();
         }
 
-        // 同對話最近 10 則(含這次要回的那則),依時間升冪;同時間時客戶訊息排在回覆之前
+        // 同對話最近 100 則(含這次要回的那則),依時間升冪;同時間時客戶訊息排在回覆之前
         var history = await conn.QueryAsync<HistoryRow>("""
             SELECT Role, Text FROM (
                 SELECT m.LineTimestamp AS Ts, 0 AS Seq, 'user' AS Role, m.MessageText AS Text
@@ -368,7 +368,7 @@ public class InboxModel : PageModel
                 WHERE m.ConversationId = @Cid AND m.LineTimestamp <= @Ts
             ) h
             ORDER BY Ts DESC, Seq DESC
-            LIMIT 10
+            LIMIT 100
             """, new { Cid = target.ConversationId, Ts = target.LineTimestamp });
 
         // 知識庫全表撈,併進 system prompt(不加 LIMIT、不篩選)
